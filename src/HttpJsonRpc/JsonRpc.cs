@@ -8,9 +8,9 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace HttpJsonRpcNet
+namespace HttpJsonRpc
 {
-    public static class HttpJsonRpc
+    public static class JsonRpc
     {
         public class Request
         {

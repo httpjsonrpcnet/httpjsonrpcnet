@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\HttpJsonRpcNet\HttpJsonRpcNet.csproj" />
+    <ProjectReference Include="..\HttpJsonRpc\HttpJsonRpc.csproj" />
   </ItemGroup>
 
 </Project>
