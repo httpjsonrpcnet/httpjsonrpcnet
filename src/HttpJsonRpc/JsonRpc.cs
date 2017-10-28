@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 
 namespace HttpJsonRpc
 {
@@ -15,6 +16,7 @@ namespace HttpJsonRpc
         public class Request
         {
             public string JsonRpc { get; set; }
+            public string Method { get; set; }
             public object Id { get; set; }
             public JToken Params { get; set; }
 
@@ -24,9 +26,21 @@ namespace HttpJsonRpc
 
         public class Response
         {
+            [JsonProperty("jsonrpc")]
             public string JsonRpc { get; set; }
+            [JsonProperty("id")]
             public object Id { get; set; }
+            [JsonProperty("result")]
             public object Result { get; set; }
+            [JsonProperty("error")]
+            public Error Error { get; set; }
+        }
+
+        public class Error
+        {
+            public int Code { get; set; }
+            public string Message { get; set; }
+            public object Data { get; set; }
         }
 
         public interface IProcedure
@@ -65,6 +79,12 @@ namespace HttpJsonRpc
 
         private static HttpListener Listener { get; set; }
         private static Dictionary<string, IProcedure> Procedures { get; } = new Dictionary<string, IProcedure>();
+        public static JsonSerializerSettings SerializerSettings { get; set; } = new JsonSerializerSettings
+        {
+            ContractResolver = new CamelCasePropertyNamesContractResolver(),
+            NullValueHandling = NullValueHandling.Ignore,
+            Formatting = Formatting.Indented
+        };
 
         public static void AddProcedure<TParams, TResult>(string name, Func<TParams, Task<TResult>> func)
         {
@@ -91,10 +111,6 @@ namespace HttpJsonRpc
 
         private static async void HandleRequest(HttpListenerContext httpContext)
         {
-            var procedureName = httpContext.Request.Url.AbsolutePath
-                .Remove(0, 1)
-                .ToLowerInvariant();
-
             string requestJson;
             using (var reader = new StreamReader(httpContext.Request.InputStream))
             {
@@ -104,7 +120,7 @@ namespace HttpJsonRpc
             var request = JsonConvert.DeserializeObject<Request>(requestJson);
             CurrentRequest = request;
 
-            var procedure = Procedures[procedureName];
+            var procedure = Procedures[request.Method];
             var result = await procedure.Invoke(request.Params);
             var response = new Response
             {
@@ -113,7 +129,7 @@ namespace HttpJsonRpc
                 Result = result
             };
 
-            var jsonResponse = JsonConvert.SerializeObject(response);
+            var jsonResponse = JsonConvert.SerializeObject(response, SerializerSettings);
 
             httpContext.Response.ContentType = "application/json";
             var byteResponse = Encoding.UTF8.GetBytes(jsonResponse);
