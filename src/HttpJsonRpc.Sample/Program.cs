@@ -8,7 +8,7 @@ namespace HttpJsonRpc.Sample
     {
         static void Main(string[] args)
         {
-            JsonRpc.AddProcedure("sum", (SumParams p) => Task.FromResult(p.Num1 + p.Num2));
+            JsonRpc.AddProcedure<SumParams, int>(SumAsync);
 
             var address = "http://localhost:5000/";
             JsonRpc.Start(address);
@@ -16,6 +16,11 @@ namespace HttpJsonRpc.Sample
             Console.WriteLine($"Listening for requests on {address}");
             Console.ReadLine();
             JsonRpc.Stop();
+        }
+
+        public static Task<int> SumAsync(SumParams parameter)
+        {
+            return Task.FromResult(parameter.Num1 + parameter.Num2);
         }
     }
 }

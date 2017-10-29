@@ -55,17 +55,17 @@ namespace HttpJsonRpc
         {
             public string Name { get; }
             public Type ParamsType => typeof(TParams);
-            public Func<TParams, Task<TResult>> Func { get; }
+            public Func<TParams, Task<TResult>> Method { get; }
 
-            public Procedure(string name, Func<TParams, Task<TResult>> func)
+            public Procedure(string name, Func<TParams, Task<TResult>> method)
             {
                 Name = name;
-                Func = func;
+                Method = method;
             }
 
             public async Task<object> Invoke(JToken @params)
             {
-                var result = await Func(@params.ToObject<TParams>());
+                var result = await Method(@params.ToObject<TParams>());
                 return result;
             }
         }
@@ -86,10 +86,20 @@ namespace HttpJsonRpc
             Formatting = Formatting.Indented
         };
 
-        public static void AddProcedure<TParams, TResult>(string name, Func<TParams, Task<TResult>> func)
+        public static void AddProcedure<TParams, TResult>(Func<TParams, Task<TResult>> method, string name = null)
         {
+            if (method == null) throw new ArgumentNullException(nameof(method));
+
+            name = name ?? method.Method.Name;
+            var asyncIndex = name.LastIndexOf("Async", StringComparison.Ordinal);
+            if (asyncIndex > -1)
+            {
+                name = name.Remove(asyncIndex);
+            }
+
             name = name.ToLowerInvariant();
-            var procedure = new Procedure<TParams, TResult>(name, func);
+
+            var procedure = new Procedure<TParams, TResult>(name, method);
             Procedures.Add(name, procedure);
         }
 
