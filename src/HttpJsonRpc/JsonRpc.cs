@@ -48,7 +48,7 @@ namespace HttpJsonRpc
             string Name { get; }
             Type ParamsType { get; }
             
-            Task<object> Invoke(JToken @params);
+            Task<object> Invoke(JToken parameters);
         }
 
         public class Procedure<TParams, TResult> : IProcedure
@@ -63,9 +63,9 @@ namespace HttpJsonRpc
                 Method = method;
             }
 
-            public async Task<object> Invoke(JToken @params)
+            public async Task<object> Invoke(JToken parameters)
             {
-                var result = await Method(@params.ToObject<TParams>());
+                var result = await Method(parameters.ToObject<TParams>());
                 return result;
             }
         }
@@ -86,11 +86,19 @@ namespace HttpJsonRpc
             Formatting = Formatting.Indented
         };
 
+        private static List<Func<Request, Task>> OnReceivedRequestFuncs { get; } = new List<Func<Request, Task>>();
+
+        public static void OnReceivedRequest(Func<Request, Task> func)
+        {
+            OnReceivedRequestFuncs.Add(func);
+        }
+
         public static void AddProcedure<TParams, TResult>(Func<TParams, Task<TResult>> method, string name = null)
         {
             if (method == null) throw new ArgumentNullException(nameof(method));
+            var methodInfo = method.Method;
 
-            name = name ?? method.Method.Name;
+            name = name ?? $"{methodInfo.DeclaringType.Name}.{methodInfo.Name}";
             var asyncIndex = name.LastIndexOf("Async", StringComparison.Ordinal);
             if (asyncIndex > -1)
             {
@@ -129,6 +137,11 @@ namespace HttpJsonRpc
 
             var request = JsonConvert.DeserializeObject<Request>(requestJson);
             CurrentRequest = request;
+
+            foreach (var f in OnReceivedRequestFuncs)
+            {
+                await f(request);
+            }
 
             var procedure = Procedures[request.Method];
             var result = await procedure.Invoke(request.Params);

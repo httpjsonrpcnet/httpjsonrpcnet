@@ -9,6 +9,11 @@ namespace HttpJsonRpc.Sample
         static void Main(string[] args)
         {
             JsonRpc.AddProcedure<SumParams, int>(SumAsync);
+            JsonRpc.OnReceivedRequest(r =>
+            {
+                Console.WriteLine($"Received request {r.Method}");
+                return Task.CompletedTask;
+            });
 
             var address = "http://localhost:5000/";
             JsonRpc.Start(address);
