@@ -21,7 +21,7 @@ namespace HttpJsonRpc
             public JToken Params { get; set; }
 
             [JsonExtensionData]
-            public Dictionary<string, JToken> ExtensionData { get; set; }
+            public JObject ExtensionData { get; set; }
         }
 
         public class Response
