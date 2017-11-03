@@ -8,7 +8,7 @@ namespace HttpJsonRpc.Sample
     {
         static void Main(string[] args)
         {
-            JsonRpc.AddProcedure<SumParams, int>(SumAsync);
+            JsonRpc.RegisterProcedures(typeof(Program).Assembly);
             JsonRpc.OnReceivedRequest(r =>
             {
                 Console.WriteLine($"Received request {r.Method}");
@@ -23,6 +23,7 @@ namespace HttpJsonRpc.Sample
             JsonRpc.Stop();
         }
 
+        [JsonRpcMethod]
         public static Task<int> SumAsync(SumParams parameter)
         {
             return Task.FromResult(parameter.Num1 + parameter.Num2);

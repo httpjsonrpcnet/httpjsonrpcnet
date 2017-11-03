@@ -1,75 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 
 namespace HttpJsonRpc
 {
     public static class JsonRpc
     {
-        public class Request
-        {
-            public string JsonRpc { get; set; }
-            public string Method { get; set; }
-            public object Id { get; set; }
-            public JToken Params { get; set; }
-
-            [JsonExtensionData]
-            public JObject ExtensionData { get; set; }
-        }
-
-        public class Response
-        {
-            [JsonProperty("jsonrpc")]
-            public string JsonRpc { get; set; }
-            [JsonProperty("id")]
-            public object Id { get; set; }
-            [JsonProperty("result")]
-            public object Result { get; set; }
-            [JsonProperty("error")]
-            public Error Error { get; set; }
-        }
-
-        public class Error
-        {
-            public int Code { get; set; }
-            public string Message { get; set; }
-            public object Data { get; set; }
-        }
-
-        public interface IProcedure
-        {
-            string Name { get; }
-            Type ParamsType { get; }
-            
-            Task<object> Invoke(JToken parameters);
-        }
-
-        public class Procedure<TParams, TResult> : IProcedure
-        {
-            public string Name { get; }
-            public Type ParamsType => typeof(TParams);
-            public Func<TParams, Task<TResult>> Method { get; }
-
-            public Procedure(string name, Func<TParams, Task<TResult>> method)
-            {
-                Name = name;
-                Method = method;
-            }
-
-            public async Task<object> Invoke(JToken parameters)
-            {
-                var result = await Method(parameters.ToObject<TParams>());
-                return result;
-            }
-        }
-
         private static readonly AsyncLocal<Request> _CurrentRequest = new AsyncLocal<Request>();
         public static Request CurrentRequest
         {
@@ -78,7 +22,7 @@ namespace HttpJsonRpc
         }
 
         private static HttpListener Listener { get; set; }
-        private static Dictionary<string, IProcedure> Procedures { get; } = new Dictionary<string, IProcedure>();
+        private static Dictionary<string, MethodInfo> Procedures { get; } = new Dictionary<string, MethodInfo>();
         public static JsonSerializerSettings SerializerSettings { get; set; } = new JsonSerializerSettings
         {
             ContractResolver = new CamelCasePropertyNamesContractResolver(),
@@ -93,22 +37,30 @@ namespace HttpJsonRpc
             OnReceivedRequestFuncs.Add(func);
         }
 
-        public static void AddProcedure<TParams, TResult>(Func<TParams, Task<TResult>> method, string name = null)
+        public static void RegisterProcedures(Assembly fromAssembly)
         {
-            if (method == null) throw new ArgumentNullException(nameof(method));
-            var methodInfo = method.Method;
+            if (fromAssembly == null) throw new ArgumentNullException(nameof(fromAssembly));
 
-            name = name ?? $"{methodInfo.DeclaringType.Name}.{methodInfo.Name}";
-            var asyncIndex = name.LastIndexOf("Async", StringComparison.Ordinal);
-            if (asyncIndex > -1)
+            foreach (var t in fromAssembly.DefinedTypes)
             {
-                name = name.Remove(asyncIndex);
+                foreach (var m in t.DeclaredMethods)
+                {
+                    var a = m.GetCustomAttribute<JsonRpcMethodAttribute>();
+                    if (a != null)
+                    {
+                        var name = a.Name ?? $"{m.DeclaringType.Name}.{m.Name}";
+                        var asyncIndex = name.LastIndexOf("Async", StringComparison.Ordinal);
+                        if (asyncIndex > -1)
+                        {
+                            name = name.Remove(asyncIndex);
+                        }
+
+                        name = name.ToLowerInvariant();
+
+                        Procedures.Add(name, m);
+                    }
+                }
             }
-
-            name = name.ToLowerInvariant();
-
-            var procedure = new Procedure<TParams, TResult>(name, method);
-            Procedures.Add(name, procedure);
         }
 
         public static async void Start(string address)
@@ -144,7 +96,12 @@ namespace HttpJsonRpc
             }
 
             var procedure = Procedures[request.Method];
-            var result = await procedure.Invoke(request.Params);
+            var parametersType = procedure.GetParameters().Single().ParameterType;
+            var parameters = request.Params.ToObject(parametersType);
+            var resultTask = (Task) procedure.Invoke(null, new[] {parameters});
+            await resultTask;
+            var result = resultTask.GetType().GetProperty("Result").GetValue(resultTask);
+
             var response = new Response
             {
                 Id = request.Id,
