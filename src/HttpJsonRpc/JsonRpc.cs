@@ -171,7 +171,7 @@ namespace HttpJsonRpc
         private static async Task WriteResponseAsync(HttpListenerContext context, Response response)
         {
             context.Response.ContentType = "application/json";
-            var jsonResponse = JsonConvert.SerializeObject(response);
+            var jsonResponse = JsonConvert.SerializeObject(response, SerializerSettings);
             var byteResponse = Encoding.UTF8.GetBytes(jsonResponse);
             await context.Response.OutputStream.WriteAsync(byteResponse, 0, byteResponse.Length);
             context.Response.OutputStream.Close();
