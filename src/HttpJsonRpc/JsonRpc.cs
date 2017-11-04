@@ -81,40 +81,98 @@ namespace HttpJsonRpc
 
         private static async void HandleRequest(HttpListenerContext httpContext)
         {
-            string requestJson;
-            using (var reader = new StreamReader(httpContext.Request.InputStream))
+            if (!new[] { "GET", "POST" }.Contains(httpContext.Request.HttpMethod, StringComparer.InvariantCultureIgnoreCase))
             {
-                requestJson = await reader.ReadToEndAsync();
+                httpContext.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                return;
             }
 
-            var request = JsonConvert.DeserializeObject<Request>(requestJson);
-            CurrentRequest = request;
-
-            foreach (var f in OnReceivedRequestFuncs)
+            if (httpContext.Request.ContentType == null || !new[] { "application/json" }.Contains(httpContext.Request.ContentType, StringComparer.InvariantCultureIgnoreCase))
             {
-                await f(request);
+                httpContext.Response.StatusCode = (int)HttpStatusCode.UnsupportedMediaType;
+                return;
             }
 
-            var procedure = Procedures[request.Method];
+            Request request;
+            try
+            {
+                string requestJson;
+                using (var reader = new StreamReader(httpContext.Request.InputStream))
+                {
+                    requestJson = await reader.ReadToEndAsync();
+                }
+
+                request = JsonConvert.DeserializeObject<Request>(requestJson);
+                CurrentRequest = request;
+            }
+            catch (Exception e)
+            {
+                await WriteResponseAsync(httpContext, Response.FromError(ErrorCodes.ParseError, null, e));
+                return;
+            }
+
+            try
+            {
+                foreach (var f in OnReceivedRequestFuncs)
+                {
+                    await f(request);
+                }
+            }
+            catch (Exception e)
+            {
+                await WriteResponseAsync(httpContext, Response.FromError(ErrorCodes.InternalError, request.Id, e));
+                return;
+            }
+
+            var method = request.Method?.ToLowerInvariant() ?? string.Empty;
+            if (!Procedures.TryGetValue(method, out var procedure))
+            {
+                await WriteResponseAsync(httpContext, Response.FromError(ErrorCodes.MethodNotFound, request.Id));
+                return;
+            }
+
             var parametersType = procedure.GetParameters().Single().ParameterType;
-            var parameters = request.Params.ToObject(parametersType);
-            var resultTask = (Task) procedure.Invoke(null, new[] {parameters});
-            await resultTask;
-            var result = resultTask.GetType().GetProperty("Result").GetValue(resultTask);
 
-            var response = new Response
+            object parameters;
+            try
             {
-                Id = request.Id,
-                JsonRpc = "2.0",
-                Result = result
-            };
+                parameters = request.Params?.ToObject(parametersType);
+            }
+            catch (Exception e)
+            {
+                await WriteResponseAsync(httpContext, Response.FromError(ErrorCodes.ParseError, request.Id, e));
+                return;
+            }
 
-            var jsonResponse = JsonConvert.SerializeObject(response, SerializerSettings);
+            try
+            {
+                var resultTask = (Task)procedure.Invoke(null, new[] { parameters });
+                await resultTask;
+                var result = resultTask.GetType().GetProperty("Result").GetValue(resultTask);
 
-            httpContext.Response.ContentType = "application/json";
+                var response = new Response
+                {
+                    Id = request.Id,
+                    JsonRpc = "2.0",
+                    Result = result
+                };
+
+                await WriteResponseAsync(httpContext, response);
+            }
+            catch (Exception e)
+            {
+                await WriteResponseAsync(httpContext, Response.FromError(ErrorCodes.ExecutionError, request.Id, e));
+                return;
+            }
+        }
+
+        private static async Task WriteResponseAsync(HttpListenerContext context, Response response)
+        {
+            context.Response.ContentType = "application/json";
+            var jsonResponse = JsonConvert.SerializeObject(response);
             var byteResponse = Encoding.UTF8.GetBytes(jsonResponse);
-            await httpContext.Response.OutputStream.WriteAsync(byteResponse, 0, byteResponse.Length);
-            httpContext.Response.OutputStream.Close();
+            await context.Response.OutputStream.WriteAsync(byteResponse, 0, byteResponse.Length);
+            context.Response.OutputStream.Close();
         }
 
         public static void Stop()
