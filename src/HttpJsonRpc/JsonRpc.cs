@@ -84,12 +84,14 @@ namespace HttpJsonRpc
             if (!new[] { "GET", "POST" }.Contains(httpContext.Request.HttpMethod, StringComparer.InvariantCultureIgnoreCase))
             {
                 httpContext.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                httpContext.Response.OutputStream.Close();
                 return;
             }
 
-            if (httpContext.Request.ContentType == null || !new[] { "application/json" }.Contains(httpContext.Request.ContentType, StringComparer.InvariantCultureIgnoreCase))
+            if (!httpContext.Request.ContentType?.ToLowerInvariant().Split(';')?.Contains("application/json") ?? false)
             {
                 httpContext.Response.StatusCode = (int)HttpStatusCode.UnsupportedMediaType;
+                httpContext.Response.OutputStream.Close();
                 return;
             }
 
