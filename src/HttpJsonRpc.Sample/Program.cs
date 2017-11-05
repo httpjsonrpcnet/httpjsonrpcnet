@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Threading.Tasks;
-using HttpJsonRpcNet.Sample;
 
 namespace HttpJsonRpc.Sample
 {
@@ -24,9 +23,9 @@ namespace HttpJsonRpc.Sample
         }
 
         [JsonRpcMethod]
-        public static Task<int> SumAsync(SumParams parameter)
+        public static Task<int> SumAsync(int num1 = 0, int num2 = 0)
         {
-            return Task.FromResult(parameter.Num1 + parameter.Num2);
+            return Task.FromResult(num1 + num2);
         }
     }
 }

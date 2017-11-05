@@ -133,12 +133,12 @@ namespace HttpJsonRpc
                 return;
             }
 
-            var parametersType = procedure.GetParameters().Single().ParameterType;
-
-            object parameters;
+            object[] parameters;
             try
             {
-                parameters = request.Params?.ToObject(parametersType);
+                parameters = procedure.GetParameters()
+                    .Select(p => request.Params?[p.Name]?.ToObject(p.ParameterType) ?? Type.Missing)
+                    .ToArray();
             }
             catch (Exception e)
             {
@@ -148,7 +148,7 @@ namespace HttpJsonRpc
 
             try
             {
-                var resultTask = (Task)procedure.Invoke(null, new[] { parameters });
+                var resultTask = (Task)procedure.Invoke(null, parameters);
                 await resultTask;
                 var result = resultTask.GetType().GetProperty("Result").GetValue(resultTask);
 
