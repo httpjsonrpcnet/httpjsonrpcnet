@@ -129,7 +129,7 @@ namespace HttpJsonRpc
             var method = request.Method?.ToLowerInvariant() ?? string.Empty;
             if (!Procedures.TryGetValue(method, out var procedure))
             {
-                await WriteResponseAsync(httpContext, Response.FromError(ErrorCodes.MethodNotFound, request.Id));
+                await WriteResponseAsync(httpContext, Response.FromError(ErrorCodes.MethodNotFound, request.Id, method));
                 return;
             }
 
