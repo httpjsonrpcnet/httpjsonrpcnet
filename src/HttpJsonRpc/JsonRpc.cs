@@ -22,7 +22,7 @@ namespace HttpJsonRpc
         }
 
         private static HttpListener Listener { get; set; }
-        private static Dictionary<string, MethodInfo> Procedures { get; } = new Dictionary<string, MethodInfo>();
+        private static Dictionary<string, MethodInfo> Methods { get; } = new Dictionary<string, MethodInfo>();
         public static JsonSerializerSettings SerializerSettings { get; set; } = new JsonSerializerSettings
         {
             ContractResolver = new CamelCasePropertyNamesContractResolver(),
@@ -57,7 +57,7 @@ namespace HttpJsonRpc
 
                         name = name.ToLowerInvariant();
 
-                        Procedures.Add(name, m);
+                        Methods.Add(name, m);
                     }
                 }
             }
@@ -126,19 +126,31 @@ namespace HttpJsonRpc
                 return;
             }
 
-            var method = request.Method?.ToLowerInvariant() ?? string.Empty;
-            if (!Procedures.TryGetValue(method, out var procedure))
+            var methodName = request.Method?.ToLowerInvariant() ?? string.Empty;
+            if (!Methods.TryGetValue(methodName, out var method))
             {
                 await WriteResponseAsync(httpContext, Response.FromError(ErrorCodes.MethodNotFound, request.Id, method));
                 return;
             }
 
-            object[] parameters;
+            var parameterValues = new List<object>();
             try
             {
-                parameters = procedure.GetParameters()
-                    .Select(p => request.Params?[p.Name]?.ToObject(p.ParameterType) ?? Type.Missing)
-                    .ToArray();
+                var parameters = method.GetParameters();
+
+                foreach (var parameter in parameters)
+                {
+                    var parameterAttribute = parameter.GetCustomAttribute<JsonRpcParameterAttribute>();
+                    if (parameterAttribute?.Ignore == true)
+                    {
+                        parameterValues.Add(Type.Missing);
+                        continue;
+                    }
+
+                    var parameterName = parameterAttribute?.Name ?? parameter.Name;
+                    var value = request.Params?[parameterName]?.ToObject(parameter.ParameterType) ?? Type.Missing;
+                    parameterValues.Add(value);
+                }
             }
             catch (Exception e)
             {
@@ -148,7 +160,7 @@ namespace HttpJsonRpc
 
             try
             {
-                var resultTask = (Task)procedure.Invoke(null, parameters);
+                var resultTask = (Task)method.Invoke(null, parameterValues.ToArray());
                 await resultTask;
                 var result = resultTask.GetType().GetProperty("Result").GetValue(resultTask);
 

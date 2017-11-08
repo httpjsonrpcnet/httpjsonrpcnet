@@ -23,9 +23,10 @@ namespace HttpJsonRpc.Sample
         }
 
         [JsonRpcMethod]
-        public static Task<int> SumAsync(int num1 = 0, int num2 = 0)
+        public static Task<int> SumAsync(int num1 = 0, int num2 = 0, [JsonRpcParameter(Name = "x")] int multiplier = 1, [JsonRpcParameter(Ignore = true)] bool log = false)
         {
-            return Task.FromResult(num1 + num2);
+            var value = (num1 + num2) * multiplier;
+            return Task.FromResult(value);
         }
     }
 }
