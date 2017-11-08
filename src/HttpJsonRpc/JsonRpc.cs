@@ -22,9 +22,9 @@ namespace HttpJsonRpc
             Formatting = Formatting.Indented
         };
 
-        private static List<Func<Request, Task>> OnReceivedRequestFuncs { get; } = new List<Func<Request, Task>>();
+        private static List<Func<JsonRpcContext, Task>> OnReceivedRequestFuncs { get; } = new List<Func<JsonRpcContext, Task>>();
 
-        public static void OnReceivedRequest(Func<Request, Task> func)
+        public static void OnReceivedRequest(Func<JsonRpcContext, Task> func)
         {
             OnReceivedRequestFuncs.Add(func);
         }
@@ -104,13 +104,14 @@ namespace HttpJsonRpc
                 return;
             }
 
-            JsonRpcContext.Current = new JsonRpcContext(request);
+            var jsonRpcContext = new JsonRpcContext(request);
+            JsonRpcContext.Current = jsonRpcContext;
 
             try
             {
                 foreach (var f in OnReceivedRequestFuncs)
                 {
-                    await f(request);
+                    await f(jsonRpcContext);
                 }
             }
             catch (Exception e)

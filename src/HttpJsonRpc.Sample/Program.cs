@@ -8,9 +8,9 @@ namespace HttpJsonRpc.Sample
         static void Main(string[] args)
         {
             JsonRpc.RegisterProcedures(typeof(Program).Assembly);
-            JsonRpc.OnReceivedRequest(r =>
+            JsonRpc.OnReceivedRequest(c =>
             {
-                Console.WriteLine($"Received request {r.Method}");
+                Console.WriteLine($"Received request {c.Request.Method}");
                 return Task.CompletedTask;
             });
 
