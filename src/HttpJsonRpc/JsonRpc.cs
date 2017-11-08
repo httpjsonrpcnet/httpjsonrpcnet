@@ -5,7 +5,6 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
@@ -14,13 +13,6 @@ namespace HttpJsonRpc
 {
     public static class JsonRpc
     {
-        private static readonly AsyncLocal<Request> _CurrentRequest = new AsyncLocal<Request>();
-        public static Request CurrentRequest
-        {
-            get => _CurrentRequest.Value;
-            set => _CurrentRequest.Value = value;
-        }
-
         private static HttpListener Listener { get; set; }
         private static Dictionary<string, MethodInfo> Methods { get; } = new Dictionary<string, MethodInfo>();
         public static JsonSerializerSettings SerializerSettings { get; set; } = new JsonSerializerSettings
@@ -105,13 +97,14 @@ namespace HttpJsonRpc
                 }
 
                 request = JsonConvert.DeserializeObject<Request>(requestJson);
-                CurrentRequest = request;
             }
             catch (Exception e)
             {
                 await WriteResponseAsync(httpContext, Response.FromError(ErrorCodes.ParseError, null, e));
                 return;
             }
+
+            JsonRpcContext.Current = new JsonRpcContext(request);
 
             try
             {
