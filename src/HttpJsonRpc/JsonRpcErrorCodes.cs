@@ -1,6 +1,6 @@
 ﻿namespace HttpJsonRpc
 {
-    public static class ErrorCodes
+    public static class JsonRpcErrorCodes
     {
         public const int ParseError = -32700;
         public const int InvalidRequest = -32600;
@@ -20,13 +20,15 @@
                 case ParseError:
                     return "Parse error";
                 case InvalidRequest:
-                    return "Invalid Request";
+                    return "Invalid JsonRpcRequest";
                 case MethodNotFound:
                     return "Method not found";
                 case InvalidParams:
                     return "Invalid params";
                 case InternalError:
                     return "Internal error";
+                case Unauthorized:
+                    return "Unauthorized";
                 default:
                     return null;
             }

@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 
 namespace HttpJsonRpc
 {
-    public class Request
+    public class JsonRpcRequest
     {
         public string JsonRpc { get; set; }
         public string Method { get; set; }

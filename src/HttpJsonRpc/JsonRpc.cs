@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -29,7 +30,7 @@ namespace HttpJsonRpc
             OnReceivedRequestFuncs.Add(func);
         }
 
-        public static void RegisterProcedures(Assembly fromAssembly)
+        public static void RegisterMethods(Assembly fromAssembly)
         {
             if (fromAssembly == null) throw new ArgumentNullException(nameof(fromAssembly));
 
@@ -55,14 +56,29 @@ namespace HttpJsonRpc
             }
         }
 
-        public static async void Start(string address)
+        public static async void Start(string address = null)
         {
-            if (address == null) throw new ArgumentNullException(nameof(address));
+            if (Methods.Count == 0)
+            {
+                var excludeProducts = new List<string> {"Microsoft® .NET Framework", "Json.NET", "HttpJsonRpc"};
+
+                var assemblies = AppDomain.CurrentDomain.GetAssemblies()
+                    .Where(a => !excludeProducts.Contains(a.GetCustomAttribute<AssemblyProductAttribute>()?.Product));
+
+                foreach (var assembly in assemblies)
+                {
+                    RegisterMethods(assembly);
+                }
+            }
+
+            if (address == null) address = "http://localhost:5000/";
             if (!address.EndsWith("/")) address += "/";
 
             Listener = new HttpListener();
             Listener.Prefixes.Add(address);
             Listener.Start();
+
+            Console.WriteLine($"Listening for JSON-RPC requests on {address}");
 
             while (Listener.IsListening)
             {
@@ -87,7 +103,7 @@ namespace HttpJsonRpc
                 return;
             }
 
-            Request request;
+            JsonRpcRequest request;
             try
             {
                 string requestJson;
@@ -96,11 +112,11 @@ namespace HttpJsonRpc
                     requestJson = await reader.ReadToEndAsync();
                 }
 
-                request = JsonConvert.DeserializeObject<Request>(requestJson);
+                request = JsonConvert.DeserializeObject<JsonRpcRequest>(requestJson);
             }
             catch (Exception e)
             {
-                await WriteResponseAsync(httpContext, Response.FromError(ErrorCodes.ParseError, null, e));
+                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.ParseError, null, e));
                 return;
             }
 
@@ -116,14 +132,14 @@ namespace HttpJsonRpc
             }
             catch (Exception e)
             {
-                await WriteResponseAsync(httpContext, Response.FromError(ErrorCodes.InternalError, request.Id, e));
+                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.InternalError, request.Id, e));
                 return;
             }
 
             var methodName = request.Method?.ToLowerInvariant() ?? string.Empty;
             if (!Methods.TryGetValue(methodName, out var method))
             {
-                await WriteResponseAsync(httpContext, Response.FromError(ErrorCodes.MethodNotFound, request.Id, method));
+                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.MethodNotFound, request.Id, method));
                 return;
             }
 
@@ -148,36 +164,49 @@ namespace HttpJsonRpc
             }
             catch (Exception e)
             {
-                await WriteResponseAsync(httpContext, Response.FromError(ErrorCodes.ParseError, request.Id, e));
+                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.ParseError, request.Id, e));
                 return;
             }
 
             try
             {
-                var resultTask = (Task)method.Invoke(null, parameterValues.ToArray());
-                await resultTask;
-                var result = resultTask.GetType().GetProperty("Result").GetValue(resultTask);
-
-                var response = new Response
+                try
                 {
-                    Id = request.Id,
-                    JsonRpc = "2.0",
-                    Result = result
-                };
+                    var resultTask = (Task)method.Invoke(null, parameterValues.ToArray());
+                    await resultTask;
+                    var result = resultTask.GetType().GetProperty("Result").GetValue(resultTask);
 
-                await WriteResponseAsync(httpContext, response);
+                    var response = new JsonRpcResponse
+                    {
+                        Id = request.Id,
+                        JsonRpc = "2.0",
+                        Result = result
+                    };
+
+                    await WriteResponseAsync(httpContext, response);
+                    return;
+                }
+                catch (TargetInvocationException ex)
+                {
+                    ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                }
+            }
+            catch (JsonRpcUnauthorizedException e)
+            {
+                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.Unauthorized, request.Id, e));
+                return;
             }
             catch (Exception e)
             {
-                await WriteResponseAsync(httpContext, Response.FromError(ErrorCodes.ExecutionError, request.Id, e));
+                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.ExecutionError, request.Id, e));
                 return;
             }
         }
 
-        private static async Task WriteResponseAsync(HttpListenerContext context, Response response)
+        private static async Task WriteResponseAsync(HttpListenerContext context, JsonRpcResponse jsonRpcResponse)
         {
             context.Response.ContentType = "application/json";
-            var jsonResponse = JsonConvert.SerializeObject(response, SerializerSettings);
+            var jsonResponse = JsonConvert.SerializeObject(jsonRpcResponse, SerializerSettings);
             var byteResponse = Encoding.UTF8.GetBytes(jsonResponse);
             await context.Response.OutputStream.WriteAsync(byteResponse, 0, byteResponse.Length);
             context.Response.OutputStream.Close();

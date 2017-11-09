@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 
 namespace HttpJsonRpc
 {
-    public class Response
+    public class JsonRpcResponse
     {
         [JsonProperty("jsonrpc")]
         public string JsonRpc { get; set; }
@@ -12,9 +12,9 @@ namespace HttpJsonRpc
         [JsonProperty("result")]
         public object Result { get; set; }
         [JsonProperty("error")]
-        public Error Error { get; set; }
+        public JsonRpcError JsonRpcError { get; set; }
 
-        public static Response FromResult(object id, object result)
+        public static JsonRpcResponse FromResult(object id, object result)
         {
             var response = Create(id);
             response.Result = JToken.FromObject(result);
@@ -22,22 +22,22 @@ namespace HttpJsonRpc
             return response;
         }
 
-        public static Response FromError(int code, object id = null, object data = null)
+        public static JsonRpcResponse FromError(int code, object id = null, object data = null)
         {
             var response = Create(id);
-            response.Error = new Error
+            response.JsonRpcError = new JsonRpcError
             {
                 Code = code,
-                Message = ErrorCodes.GetMessage(code),
+                Message = JsonRpcErrorCodes.GetMessage(code),
                 Data = data == null ? null : JToken.FromObject(data)
             };
 
             return response;
         }
 
-        private static Response Create(object id)
+        private static JsonRpcResponse Create(object id)
         {
-            return new Response
+            return new JsonRpcResponse
             {
                 JsonRpc = "2.0",
                 Id = id

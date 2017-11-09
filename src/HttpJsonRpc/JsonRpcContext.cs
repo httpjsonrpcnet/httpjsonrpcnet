@@ -12,10 +12,10 @@ namespace HttpJsonRpc
             set => _Current.Value = value;
         }
 
-        public Request Request { get; }
+        public JsonRpcRequest Request { get; }
         public Dictionary<string, object> Values { get; } = new Dictionary<string, object>();
 
-        public JsonRpcContext(Request request)
+        public JsonRpcContext(JsonRpcRequest request)
         {
             Request = request;
         }

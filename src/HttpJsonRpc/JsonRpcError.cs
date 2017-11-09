@@ -1,6 +1,6 @@
 ﻿namespace HttpJsonRpc
 {
-    public class Error
+    public class JsonRpcError
     {
         public int Code { get; set; }
         public string Message { get; set; }
