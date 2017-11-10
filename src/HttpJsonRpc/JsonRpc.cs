@@ -172,9 +172,9 @@ namespace HttpJsonRpc
             {
                 try
                 {
-                    var resultTask = (Task)method.Invoke(null, parameterValues.ToArray());
-                    await resultTask;
-                    var result = resultTask.GetType().GetProperty("Result").GetValue(resultTask);
+                    var methodTask = (Task)method.Invoke(null, parameterValues.ToArray());
+                    await methodTask;
+                    var result = methodTask.GetType().GetProperty("Result")?.GetValue(methodTask);
 
                     var response = new JsonRpcResponse
                     {

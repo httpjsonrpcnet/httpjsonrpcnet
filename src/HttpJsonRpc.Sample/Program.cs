@@ -25,5 +25,13 @@ namespace HttpJsonRpc.Sample
             var value = (num1 + num2) * multiplier;
             return Task.FromResult(value);
         }
+
+        [JsonRpcMethod]
+        public static Task WriteLineAsync(string message)
+        {
+            Console.WriteLine(message);
+
+            return Task.CompletedTask;
+        }
     }
 }
