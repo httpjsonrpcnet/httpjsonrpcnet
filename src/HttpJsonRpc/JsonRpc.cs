@@ -86,7 +86,7 @@ namespace HttpJsonRpc
                 HandleRequest(httpContext);
             }
         }
-
+        
         private static async void HandleRequest(HttpListenerContext httpContext)
         {
             if (!new[] { "GET", "POST" }.Contains(httpContext.Request.HttpMethod, StringComparer.InvariantCultureIgnoreCase))
@@ -96,22 +96,40 @@ namespace HttpJsonRpc
                 return;
             }
 
-            if (!httpContext.Request.ContentType?.ToLowerInvariant().Split(';')?.Contains("application/json") ?? false)
+            var contentType = httpContext.Request.ContentType.ToLowerInvariant().Split(';')[0];
+            string requestJson = null;
+            switch (contentType)
             {
-                httpContext.Response.StatusCode = (int)HttpStatusCode.UnsupportedMediaType;
-                httpContext.Response.OutputStream.Close();
-                return;
-            }
+                case "application/json":
+                    using (var reader = new StreamReader(httpContext.Request.InputStream))
+                    {
+                        requestJson = await reader.ReadToEndAsync();
+                    }
+                    break;
+                case "multipart/form-data":
+                    using (var reader = new StreamReader(httpContext.Request.InputStream))
+                    {
+                        var boundary = await reader.ReadLineAsync();
+                        var multipartString = await reader.ReadToEndAsync();
+                        var parts = multipartString.Split(new[] {boundary}, StringSplitOptions.RemoveEmptyEntries);
+                        var requestPartHeader = "Content-Disposition: form-data; name=\"request\"";
+                        var requestPart = parts.FirstOrDefault(p => p.StartsWith(requestPartHeader));
 
+                        if (requestPart != null)
+                        {
+                            requestJson = requestPart.Substring(requestPartHeader.Length).Trim();
+                        }
+                    }
+                    break;
+                default:
+                    httpContext.Response.StatusCode = (int)HttpStatusCode.UnsupportedMediaType;
+                    httpContext.Response.OutputStream.Close();
+                    return;
+            }
+            
             JsonRpcRequest request;
             try
             {
-                string requestJson;
-                using (var reader = new StreamReader(httpContext.Request.InputStream))
-                {
-                    requestJson = await reader.ReadToEndAsync();
-                }
-
                 request = JsonConvert.DeserializeObject<JsonRpcRequest>(requestJson);
             }
             catch (Exception e)
@@ -120,7 +138,7 @@ namespace HttpJsonRpc
                 return;
             }
 
-            var jsonRpcContext = new JsonRpcContext(request);
+            var jsonRpcContext = new JsonRpcContext(httpContext, request);
             JsonRpcContext.Current = jsonRpcContext;
 
             try

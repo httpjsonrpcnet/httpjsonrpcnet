@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Net;
 using System.Threading;
 
 namespace HttpJsonRpc
@@ -12,11 +13,13 @@ namespace HttpJsonRpc
             set => _Current.Value = value;
         }
 
+        public HttpListenerContext HttpContext { get; }
         public JsonRpcRequest Request { get; }
         public Dictionary<string, object> Values { get; } = new Dictionary<string, object>();
 
-        public JsonRpcContext(JsonRpcRequest request)
+        public JsonRpcContext(HttpListenerContext httpContext, JsonRpcRequest request)
         {
+            HttpContext = httpContext;
             Request = request;
         }
     }
