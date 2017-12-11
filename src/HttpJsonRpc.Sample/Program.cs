@@ -18,7 +18,7 @@ namespace HttpJsonRpc.Sample
             JsonRpc.Stop();
         }
 
-        [JsonRpcMethod]
+        [JsonRpcMethod(Description = "Provides the sum of two numbers.")]
         public static Task<int> SumAsync(int num1 = 0, int num2 = 0, [JsonRpcParameter(Name = "x")] int multiplier = 1, [JsonRpcParameter(Ignore = true)] bool log = false, bool throwException = false)
         {
             if (throwException) JsonRpcUnauthorizedException.Throw();

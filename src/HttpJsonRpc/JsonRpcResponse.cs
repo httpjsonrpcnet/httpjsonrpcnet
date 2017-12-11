@@ -17,7 +17,7 @@ namespace HttpJsonRpc
         public static JsonRpcResponse FromResult(object id, object result)
         {
             var response = Create(id);
-            response.Result = JToken.FromObject(result);
+            response.Result = result;
 
             return response;
         }

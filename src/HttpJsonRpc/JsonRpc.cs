@@ -15,7 +15,7 @@ namespace HttpJsonRpc
     public static class JsonRpc
     {
         private static HttpListener Listener { get; set; }
-        private static Dictionary<string, MethodInfo> Methods { get; } = new Dictionary<string, MethodInfo>();
+        private static JsonRpcMethodCollection Methods { get; } = new JsonRpcMethodCollection();
         public static JsonSerializerSettings SerializerSettings { get; set; } = new JsonSerializerSettings
         {
             ContractResolver = new CamelCasePropertyNamesContractResolver(),
@@ -38,20 +38,36 @@ namespace HttpJsonRpc
             {
                 foreach (var m in t.DeclaredMethods)
                 {
-                    var a = m.GetCustomAttribute<JsonRpcMethodAttribute>();
-                    if (a != null)
+                    var methodAttribute = m.GetCustomAttribute<JsonRpcMethodAttribute>();
+                    if (methodAttribute == null) continue;
+
+                    var name = methodAttribute.Name ?? $"{m.DeclaringType.Name}.{m.Name}";
+                    var asyncIndex = name.LastIndexOf("Async", StringComparison.Ordinal);
+                    if (asyncIndex > -1)
                     {
-                        var name = a.Name ?? $"{m.DeclaringType.Name}.{m.Name}";
-                        var asyncIndex = name.LastIndexOf("Async", StringComparison.Ordinal);
-                        if (asyncIndex > -1)
-                        {
-                            name = name.Remove(asyncIndex);
-                        }
-
-                        name = name.ToLowerInvariant();
-
-                        Methods.Add(name, m);
+                        name = name.Remove(asyncIndex);
                     }
+
+                    name = name.ToLowerInvariant();
+
+                    var method = new JsonRpcMethod();
+                    method.Name = name;
+                    method.Description = methodAttribute.Description;
+
+                    foreach (var parameterInfo in m.GetParameters())
+                    {
+                        var parameterAttribute = parameterInfo.GetCustomAttribute<JsonRpcParameterAttribute>();
+                        if (parameterAttribute?.Ignore ?? false) continue;
+
+                        var parameter = new JsonRpcParameter();
+                        parameter.Name = parameterAttribute?.Name ?? parameterInfo.Name;
+                        parameter.Description = parameterAttribute?.Description;
+                        parameter.Type = JsonTypeMap.GetJsonType(parameterInfo.ParameterType);
+                        parameter.Optional = parameterInfo.IsOptional;
+                        method.Parameters.Add(parameter);
+                    }
+
+                    Methods.Add(method);
                 }
             }
         }
@@ -99,8 +115,9 @@ namespace HttpJsonRpc
             var contentType = httpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
             if (contentType == null)
             {
-                var jsonRpcMethods = GetJsonRpcMethods();
-                await WriteResponseAsync(httpContext, JsonRpcResponse.FromResult(null, jsonRpcMethods));
+                var info = new JsonRpcInfo();
+                info.Methods = Methods.ToList();
+                await WriteResponseAsync(httpContext, JsonRpcResponse.FromResult(null, info));
                 return;
             }
 
@@ -160,18 +177,19 @@ namespace HttpJsonRpc
                 await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.InternalError, request.Id, e));
                 return;
             }
-
+            
             var methodName = request.Method?.ToLowerInvariant() ?? string.Empty;
-            if (!Methods.TryGetValue(methodName, out var method))
+            if (!Methods.Contains(methodName))
             {
-                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.MethodNotFound, request.Id, method));
+                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.MethodNotFound, request.Id, methodName));
                 return;
             }
 
+            var method = Methods[methodName];
             var parameterValues = new List<object>();
             try
             {
-                var parameters = method.GetParameters();
+                var parameters = method.MethodInfo.GetParameters();
 
                 foreach (var parameter in parameters)
                 {
@@ -197,7 +215,7 @@ namespace HttpJsonRpc
             {
                 try
                 {
-                    var methodTask = (Task)method.Invoke(null, parameterValues.ToArray());
+                    var methodTask = (Task)method.MethodInfo.Invoke(null, parameterValues.ToArray());
                     await methodTask;
                     var result = methodTask.GetType().GetProperty("Result")?.GetValue(methodTask);
 
@@ -240,31 +258,6 @@ namespace HttpJsonRpc
         public static void Stop()
         {
             Listener?.Stop();
-        }
-
-        private static List<JsonRpcMethod> GetJsonRpcMethods()
-        {
-            var methods = new List<JsonRpcMethod>();
-            foreach (var methodInfo in Methods.Values)
-            {
-                var method = new JsonRpcMethod();
-                method.Name = methodInfo.Name;
-
-                foreach (var parameterInfo in methodInfo.GetParameters())
-                {
-                    var parameterAttribute = parameterInfo.GetCustomAttribute<JsonRpcParameterAttribute>();
-                    if (parameterAttribute?.Ignore ?? false) continue;
-
-                    var parameter = new JsonRpcParameter();
-                    parameter.Name = parameterAttribute?.Name ?? parameterInfo.Name;
-                    parameter.Type = JsonTypeMap.GetJsonType(parameterInfo.ParameterType);
-                    method.Parameters.Add(parameter);
-                }
-
-                methods.Add(method);
-            }
-
-            return methods;
         }
     }
 }

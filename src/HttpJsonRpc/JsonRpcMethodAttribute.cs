@@ -6,6 +6,7 @@ namespace HttpJsonRpc
     public class JsonRpcMethodAttribute : Attribute
     {
         public string Name { get; }
+        public string Description { get; set; }
 
         public JsonRpcMethodAttribute()
         {
