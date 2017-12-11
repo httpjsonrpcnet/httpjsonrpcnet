@@ -96,7 +96,14 @@ namespace HttpJsonRpc
                 return;
             }
 
-            var contentType = httpContext.Request.ContentType.ToLowerInvariant().Split(';')[0];
+            var contentType = httpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
+            if (contentType == null)
+            {
+                var jsonRpcMethods = GetJsonRpcMethods();
+                await WriteResponseAsync(httpContext, JsonRpcResponse.FromResult(null, jsonRpcMethods));
+                return;
+            }
+
             string requestJson = null;
             switch (contentType)
             {
@@ -233,6 +240,31 @@ namespace HttpJsonRpc
         public static void Stop()
         {
             Listener?.Stop();
+        }
+
+        private static List<JsonRpcMethod> GetJsonRpcMethods()
+        {
+            var methods = new List<JsonRpcMethod>();
+            foreach (var methodInfo in Methods.Values)
+            {
+                var method = new JsonRpcMethod();
+                method.Name = methodInfo.Name;
+
+                foreach (var parameterInfo in methodInfo.GetParameters())
+                {
+                    var parameterAttribute = parameterInfo.GetCustomAttribute<JsonRpcParameterAttribute>();
+                    if (parameterAttribute?.Ignore ?? false) continue;
+
+                    var parameter = new JsonRpcParameter();
+                    parameter.Name = parameterAttribute?.Name ?? parameterInfo.Name;
+                    parameter.Type = JsonTypeMap.GetJsonType(parameterInfo.ParameterType);
+                    method.Parameters.Add(parameter);
+                }
+
+                methods.Add(method);
+            }
+
+            return methods;
         }
     }
 }
