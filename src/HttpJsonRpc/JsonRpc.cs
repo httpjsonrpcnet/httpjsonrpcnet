@@ -53,6 +53,7 @@ namespace HttpJsonRpc
                     var method = new JsonRpcMethod();
                     method.Name = name;
                     method.Description = methodAttribute.Description;
+                    method.MethodInfo = m;
 
                     foreach (var parameterInfo in m.GetParameters())
                     {
