@@ -37,12 +37,15 @@ namespace HttpJsonRpc
 
             foreach (var t in fromAssembly.DefinedTypes)
             {
+                var classAttribute = t.GetCustomAttribute<JsonRpcClassAttribute>();
+                var className = classAttribute?.Name ?? t.Name;
+
                 foreach (var m in t.DeclaredMethods)
                 {
                     var methodAttribute = m.GetCustomAttribute<JsonRpcMethodAttribute>();
                     if (methodAttribute == null) continue;
 
-                    var name = methodAttribute.Name ?? $"{m.DeclaringType.Name}.{m.Name}";
+                    var name = methodAttribute.Name ?? $"{className}.{m.Name}";
                     var asyncIndex = name.LastIndexOf("Async", StringComparison.Ordinal);
                     if (asyncIndex > -1)
                     {
