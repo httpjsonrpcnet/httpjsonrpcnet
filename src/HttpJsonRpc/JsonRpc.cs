@@ -120,7 +120,7 @@ namespace HttpJsonRpc
             JsonRpcRequest request = null;
             JsonRpcMethod method = null;
 
-            if (httpContext.Request.QueryString != null)
+            if (httpContext.Request.QueryString.Count > 0)
             {
                 request = new JsonRpcRequest();
 
