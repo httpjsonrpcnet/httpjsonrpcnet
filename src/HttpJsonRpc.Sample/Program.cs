@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Threading.Tasks;
 
 namespace HttpJsonRpc.Sample
@@ -32,6 +33,21 @@ namespace HttpJsonRpc.Sample
             Console.WriteLine(message);
 
             return Task.CompletedTask;
+        }
+
+        [JsonRpcMethod]
+        public static async Task UploadAsync(string fileName)
+        {
+            using (var f = File.Create(fileName))
+            {
+                await JsonRpcContext.Current.HttpContext.Request.InputStream.CopyToAsync(f);
+            }
+        }
+
+        [JsonRpcMethod]
+        public static Task<Stream> DownloadAsync(string fileName)
+        {
+            return Task.FromResult((Stream) File.OpenRead(fileName));
         }
     }
 }

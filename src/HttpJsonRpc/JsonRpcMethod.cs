@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Reflection;
+﻿using System.Reflection;
 using Newtonsoft.Json;
 
 namespace HttpJsonRpc
@@ -8,7 +7,7 @@ namespace HttpJsonRpc
     {
         public string Name { get; set; }
         public string Description { get; set; }
-        public List<JsonRpcParameter> Parameters { get; } = new List<JsonRpcParameter>();
+        public JsonRpcParameterCollection Parameters { get; } = new JsonRpcParameterCollection();
 
         [JsonIgnore]
         public MethodInfo MethodInfo { get; set; }

@@ -118,59 +118,17 @@ namespace HttpJsonRpc
             }
 
             JsonRpcRequest request = null;
-            var contentType = httpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
-            if (contentType != null)
-            {
-                string requestJson = null;
+            JsonRpcMethod method = null;
 
-                switch (contentType)
-                {
-                    case "application/json":
-                        using (var reader = new StreamReader(httpContext.Request.InputStream))
-                        {
-                            requestJson = await reader.ReadToEndAsync();
-                        }
-                        break;
-                    case "multipart/form-data":
-                        using (var reader = new StreamReader(httpContext.Request.InputStream))
-                        {
-                            var boundary = await reader.ReadLineAsync();
-                            var multipartString = await reader.ReadToEndAsync();
-                            var parts = multipartString.Split(new[] {boundary}, StringSplitOptions.RemoveEmptyEntries);
-                            var requestPartHeader = "Content-Disposition: form-data; name=\"request\"";
-                            var requestPart = parts.FirstOrDefault(p => p.StartsWith(requestPartHeader));
-
-                            if (requestPart != null)
-                            {
-                                requestJson = requestPart.Substring(requestPartHeader.Length).Trim();
-                            }
-                        }
-                        break;
-                    default:
-                        httpContext.Response.StatusCode = (int) HttpStatusCode.UnsupportedMediaType;
-                        httpContext.Response.OutputStream.Close();
-                        return;
-                }
-
-                try
-                {
-                    request = JsonConvert.DeserializeObject<JsonRpcRequest>(requestJson);
-                }
-                catch (Exception e)
-                {
-                    await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.ParseError, null, e));
-                    return;
-                }
-            }
-            else if (httpContext.Request.QueryString != null)
+            if (httpContext.Request.QueryString != null)
             {
                 request = new JsonRpcRequest();
-                
+
                 var parameters = new Dictionary<string, string>();
                 var queryString = httpContext.Request.QueryString;
                 foreach (var key in queryString.AllKeys)
                 {
-                    if (key == null) continue;;
+                    if (key == null) continue; ;
                     var value = queryString[key];
 
                     if (key == "jsonrpc")
@@ -194,7 +152,75 @@ namespace HttpJsonRpc
                     parameters[key] = value;
                 }
 
+                method = GetMethod(request.Method);
+
+                //Move unknown values into ExtensionData
+                if (method != null)
+                {
+                    var extensionData = new Dictionary<string, string>();
+                    foreach (var parameter in parameters)
+                    {
+                        if (!method.Parameters.Contains(parameter.Key)) extensionData.Add(parameter.Key, parameter.Value);
+                    }
+
+                    foreach (var parameter in extensionData)
+                    {
+                        parameters.Remove(parameter.Key);
+                    }
+
+                    request.ExtensionData = JObject.FromObject(extensionData);
+                }
+
                 request.Params = JObject.FromObject(parameters);
+            }
+            else
+            {
+                var contentType = httpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
+                if (contentType != null)
+                {
+                    string requestJson = null;
+
+                    switch (contentType)
+                    {
+                        case "application/json":
+                            using (var reader = new StreamReader(httpContext.Request.InputStream))
+                            {
+                                requestJson = await reader.ReadToEndAsync();
+                            }
+                            break;
+                        case "multipart/form-data":
+                            using (var reader = new StreamReader(httpContext.Request.InputStream))
+                            {
+                                var boundary = await reader.ReadLineAsync();
+                                var multipartString = await reader.ReadToEndAsync();
+                                var parts = multipartString.Split(new[] { boundary }, StringSplitOptions.RemoveEmptyEntries);
+                                var requestPartHeader = "Content-Disposition: form-data; name=\"request\"";
+                                var requestPart = parts.FirstOrDefault(p => p.StartsWith(requestPartHeader));
+
+                                if (requestPart != null)
+                                {
+                                    requestJson = requestPart.Substring(requestPartHeader.Length).Trim();
+                                }
+                            }
+                            break;
+                        default:
+                            httpContext.Response.StatusCode = (int)HttpStatusCode.UnsupportedMediaType;
+                            httpContext.Response.OutputStream.Close();
+                            return;
+                    }
+
+                    try
+                    {
+                        request = JsonConvert.DeserializeObject<JsonRpcRequest>(requestJson);
+                    }
+                    catch (Exception e)
+                    {
+                        await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.ParseError, null, e));
+                        return;
+                    }
+
+                    method = GetMethod(request.Method);
+                }
             }
 
             if (request?.Method == null)
@@ -220,19 +246,17 @@ namespace HttpJsonRpc
                 await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.InternalError, request.Id, e));
                 return;
             }
-            
-            var methodName = request.Method?.ToLowerInvariant() ?? string.Empty;
-            if (!Methods.Contains(methodName))
+
+            if (method == null)
             {
-                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.MethodNotFound, request.Id, methodName));
+                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.MethodNotFound, request.Id, request.Method));
                 return;
             }
 
-            var rpcMethod = Methods[methodName];
             var parameterValues = new List<object>();
             try
             {
-                var parameters = rpcMethod.MethodInfo.GetParameters();
+                var parameters = method.MethodInfo.GetParameters();
 
                 foreach (var parameter in parameters)
                 {
@@ -258,18 +282,22 @@ namespace HttpJsonRpc
             {
                 try
                 {
-                    var methodTask = (Task)rpcMethod.MethodInfo.Invoke(null, parameterValues.ToArray());
+                    var methodTask = (Task) method.MethodInfo.Invoke(null, parameterValues.ToArray());
                     await methodTask;
                     var result = methodTask.GetType().GetProperty("Result")?.GetValue(methodTask);
 
-                    var response = new JsonRpcResponse
+                    if (!(result is Stream))
                     {
-                        Id = request.Id,
-                        JsonRpc = "2.0",
-                        Result = result
-                    };
+                        result = new JsonRpcResponse
+                        {
+                            Id = request.Id,
+                            JsonRpc = "2.0",
+                            Result = result
+                        };
+                    }
 
-                    await WriteResponseAsync(httpContext, response);
+                    await WriteResponseAsync(httpContext, result);
+
                     return;
                 }
                 catch (TargetInvocationException ex)
@@ -289,12 +317,37 @@ namespace HttpJsonRpc
             }
         }
 
-        private static async Task WriteResponseAsync(HttpListenerContext context, JsonRpcResponse jsonRpcResponse)
+        private static JsonRpcMethod GetMethod(string name)
         {
-            context.Response.ContentType = "application/json";
-            var jsonResponse = JsonConvert.SerializeObject(jsonRpcResponse, SerializerSettings);
-            var byteResponse = Encoding.UTF8.GetBytes(jsonResponse);
-            await context.Response.OutputStream.WriteAsync(byteResponse, 0, byteResponse.Length);
+            if (name == null) return null;
+
+            name = name.ToLowerInvariant();
+            if (!Methods.Contains(name)) return null;
+
+            var method = Methods[name];
+
+            return method;
+        }
+
+        private static async Task WriteResponseAsync(HttpListenerContext context, object result)
+        {
+            if (result is Stream resultStream)
+            {
+                context.Response.ContentType = "application/octet-stream";
+
+                using (resultStream)
+                {
+                    await resultStream.CopyToAsync(context.Response.OutputStream);
+                }
+            }
+            else
+            {
+                context.Response.ContentType = "application/json";
+                var jsonResponse = JsonConvert.SerializeObject(result, SerializerSettings);
+                var byteResponse = Encoding.UTF8.GetBytes(jsonResponse);
+                await context.Response.OutputStream.WriteAsync(byteResponse, 0, byteResponse.Length);
+            }
+
             context.Response.OutputStream.Close();
         }
 
