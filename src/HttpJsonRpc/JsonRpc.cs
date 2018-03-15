@@ -103,8 +103,15 @@ namespace HttpJsonRpc
 
             while (Listener.IsListening)
             {
-                var httpContext = await Listener.GetContextAsync();
-                HandleRequest(httpContext);
+                try
+                {
+                    var httpContext = await Listener.GetContextAsync();
+                    HandleRequest(httpContext);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                }
             }
         }
 
