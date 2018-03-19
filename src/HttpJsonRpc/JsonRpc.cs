@@ -261,6 +261,7 @@ namespace HttpJsonRpc
                 return;
             }
 
+            //Prepare the method parameters
             var parameterValues = new List<object>();
             try
             {
@@ -286,6 +287,7 @@ namespace HttpJsonRpc
                 return;
             }
 
+            //Execute the method
             try
             {
                 try
