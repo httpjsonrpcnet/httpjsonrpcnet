@@ -126,6 +126,7 @@ namespace HttpJsonRpc
 
             JsonRpcRequest request = null;
             JsonRpcMethod method = null;
+            var serializer = CreateSerializer();
 
             if (httpContext.Request.QueryString.Count > 0)
             {
@@ -175,10 +176,10 @@ namespace HttpJsonRpc
                         parameters.Remove(parameter.Key);
                     }
 
-                    request.ExtensionData = JObject.FromObject(extensionData);
+                    request.ExtensionData = JObject.FromObject(extensionData, serializer);
                 }
 
-                request.Params = JObject.FromObject(parameters);
+                request.Params = JObject.FromObject(parameters, serializer);
             }
             else
             {
@@ -218,7 +219,7 @@ namespace HttpJsonRpc
 
                     try
                     {
-                        request = JsonConvert.DeserializeObject<JsonRpcRequest>(requestJson);
+                        request = JsonConvert.DeserializeObject<JsonRpcRequest>(requestJson, SerializerSettings);
                     }
                     catch (Exception e)
                     {
@@ -275,7 +276,7 @@ namespace HttpJsonRpc
                     }
 
                     var parameterName = parameterAttribute?.Name ?? parameter.Name;
-                    var value = request.Params?[parameterName]?.ToObject(parameter.ParameterType) ?? Type.Missing;
+                    var value = request.Params?[parameterName]?.ToObject(parameter.ParameterType, serializer) ?? Type.Missing;
                     parameterValues.Add(value);
                 }
             }
@@ -361,6 +362,11 @@ namespace HttpJsonRpc
         public static void Stop()
         {
             Listener?.Stop();
+        }
+
+        private static JsonSerializer CreateSerializer()
+        {
+            return JsonSerializer.Create(SerializerSettings);
         }
     }
 }
