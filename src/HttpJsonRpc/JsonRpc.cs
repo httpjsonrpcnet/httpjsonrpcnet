@@ -24,7 +24,13 @@ namespace HttpJsonRpc
             Formatting = Formatting.Indented
         };
 
+        private static List<Func<HttpListenerContext, Task>> OnReceivedHttpRequestFuncs { get; } = new List<Func<HttpListenerContext, Task>>();
         private static List<Func<JsonRpcContext, Task>> OnReceivedRequestFuncs { get; } = new List<Func<JsonRpcContext, Task>>();
+
+        public static void OnReceivedHttpRequest(Func<HttpListenerContext, Task> func)
+        {
+            OnReceivedHttpRequestFuncs.Add(func);
+        }
 
         public static void OnReceivedRequest(Func<JsonRpcContext, Task> func)
         {
@@ -117,10 +123,24 @@ namespace HttpJsonRpc
 
         private static async void HandleRequest(HttpListenerContext httpContext)
         {
+            try
+            {
+                foreach (var f in OnReceivedHttpRequestFuncs)
+                {
+                    await f(httpContext);
+                    if (httpContext.Response.ContentLength64 != 0) return;
+                }
+            }
+            catch (Exception e)
+            {
+                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.InternalError, e: e));
+                return;
+            }
+
             if (!new[] { "GET", "POST" }.Contains(httpContext.Request.HttpMethod, StringComparer.InvariantCultureIgnoreCase))
             {
                 httpContext.Response.StatusCode = (int)HttpStatusCode.NotFound;
-                httpContext.Response.OutputStream.Close();
+                httpContext.Response.Close();
                 return;
             }
 
@@ -213,7 +233,7 @@ namespace HttpJsonRpc
                             break;
                         default:
                             httpContext.Response.StatusCode = (int)HttpStatusCode.UnsupportedMediaType;
-                            httpContext.Response.OutputStream.Close();
+                            httpContext.Response.Close();
                             return;
                     }
 
@@ -247,6 +267,7 @@ namespace HttpJsonRpc
                 foreach (var f in OnReceivedRequestFuncs)
                 {
                     await f(jsonRpcContext);
+                    if (jsonRpcContext.HttpContext.Response.ContentLength64 != 0) return;
                 }
             }
             catch (Exception e)
@@ -344,6 +365,7 @@ namespace HttpJsonRpc
             if (result is Stream resultStream)
             {
                 context.Response.ContentType = "application/octet-stream";
+                context.Response.ContentLength64 = resultStream.Length;
 
                 using (resultStream)
                 {
@@ -355,10 +377,11 @@ namespace HttpJsonRpc
                 context.Response.ContentType = "application/json";
                 var jsonResponse = JsonConvert.SerializeObject(result, SerializerSettings);
                 var byteResponse = Encoding.UTF8.GetBytes(jsonResponse);
+                context.Response.ContentLength64 = byteResponse.Length;
                 await context.Response.OutputStream.WriteAsync(byteResponse, 0, byteResponse.Length);
             }
 
-            context.Response.OutputStream.Close();
+            context.Response.Close();
         }
 
         public static void Stop()

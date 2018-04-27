@@ -8,6 +8,12 @@ namespace HttpJsonRpc.Sample
     {
         static void Main(string[] args)
         {
+            JsonRpc.OnReceivedHttpRequest(c =>
+            {
+                Console.WriteLine($"Received HTTP request {c.Request.Url}");
+                return Task.CompletedTask;
+            });
+
             JsonRpc.OnReceivedRequest(c =>
             {
                 Console.WriteLine($"Received jsonRpcRequest {c.Request.Method}");
