@@ -260,7 +260,6 @@ namespace HttpJsonRpc
             }
 
             Logger?.LogInformation($"Recieved request:{Environment.NewLine}{jRequest}");
-            //Logger?.LogInformation(jRequest.ToString());
 
             JsonRpcRequest request = null;
             try
@@ -400,6 +399,8 @@ namespace HttpJsonRpc
             {
                 context.Response.ContentType = "application/json";
                 var jsonResponse = JsonConvert.SerializeObject(result, SerializerSettings);
+                Logger?.LogInformation($"Response:{Environment.NewLine}{jsonResponse}");
+
                 var byteResponse = Encoding.UTF8.GetBytes(jsonResponse);
                 context.Response.ContentLength64 = byteResponse.Length;
                 await output.WriteAsync(byteResponse, 0, byteResponse.Length);
