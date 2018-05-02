@@ -7,16 +7,19 @@ using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 
 namespace HttpJsonRpc
 {
-    public static class JsonRpc
+    public class JsonRpc
     {
-        private static HttpListener Listener { get; set; }
-        private static JsonRpcMethodCollection Methods { get; } = new JsonRpcMethodCollection();
+        public static IServiceProvider ServiceProvider { get; set; }
+        public static Action<ServiceCollection> ConfigureServices { get; set; }
+
         public static JsonSerializerSettings SerializerSettings { get; set; } = new JsonSerializerSettings
         {
             ContractResolver = new CamelCasePropertyNamesContractResolver(),
@@ -24,8 +27,15 @@ namespace HttpJsonRpc
             Formatting = Formatting.Indented
         };
 
+        private static ILogger Logger { get; set; }
+        private static HttpListener Listener { get; set; }
+        private static JsonRpcMethodCollection Methods { get; } = new JsonRpcMethodCollection();
         private static List<Func<HttpListenerContext, Task>> OnReceivedHttpRequestFuncs { get; } = new List<Func<HttpListenerContext, Task>>();
         private static List<Func<JsonRpcContext, Task>> OnReceivedRequestFuncs { get; } = new List<Func<JsonRpcContext, Task>>();
+
+        private JsonRpc()
+        {
+        }
 
         public static void OnReceivedHttpRequest(Func<HttpListenerContext, Task> func)
         {
@@ -98,6 +108,9 @@ namespace HttpJsonRpc
                 }
             }
 
+            CreateServiceProvider();
+            CreateLogger();
+
             if (address == null) address = "http://localhost:5000/";
             if (!address.EndsWith("/")) address += "/";
 
@@ -105,7 +118,7 @@ namespace HttpJsonRpc
             Listener.Prefixes.Add(address);
             Listener.Start();
 
-            Console.WriteLine($"Listening for JSON-RPC requests on {address}");
+            Logger?.LogInformation($"Listening for JSON-RPC requests on {address}");
 
             while (Listener.IsListening)
             {
@@ -116,7 +129,7 @@ namespace HttpJsonRpc
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine(e);
+                    Logger?.LogError(e, "An error occured while accepting a request.");
                 }
             }
         }
@@ -133,73 +146,60 @@ namespace HttpJsonRpc
             }
             catch (Exception e)
             {
-                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.InternalError, e: e));
+                await HandleErrorAsync(httpContext, JsonRpcErrorCodes.InternalError, null, e);
                 return;
             }
 
             if (!new[] { "GET", "POST" }.Contains(httpContext.Request.HttpMethod, StringComparer.InvariantCultureIgnoreCase))
             {
                 httpContext.Response.StatusCode = (int)HttpStatusCode.NotFound;
-                httpContext.Response.Close();
+                httpContext.Response.OutputStream.Close();
                 return;
             }
 
-            JsonRpcRequest request = null;
+            JObject jRequest = null;
             JsonRpcMethod method = null;
             var serializer = CreateSerializer();
 
             if (httpContext.Request.QueryString.Count > 0)
             {
-                request = new JsonRpcRequest();
+                jRequest = new JObject();
+                var parameters = new JObject();
+                jRequest["params"] = parameters;
 
-                var parameters = new Dictionary<string, string>();
                 var queryString = httpContext.Request.QueryString;
                 foreach (var key in queryString.AllKeys)
                 {
                     if (key == null) continue; ;
                     var value = queryString[key];
 
-                    if (key == "jsonrpc")
+                    if (key == "jsonrpc" || key == "id" || key == "method")
                     {
-                        request.JsonRpc = value;
-                        continue;
-                    }
-
-                    if (key == "id")
-                    {
-                        request.Id = value;
-                        continue;
-                    }
-
-                    if (key == "method")
-                    {
-                        request.Method = value;
+                        jRequest[key] = value;
                         continue;
                     }
 
                     parameters[key] = value;
                 }
 
-                method = GetMethod(request.Method);
+                method = GetMethod(jRequest["method"].ToString());
 
                 //Move unknown values into ExtensionData
                 if (method != null)
                 {
-                    var extensionData = new Dictionary<string, string>();
+                    var extensionData = new JObject();
+                    jRequest["extensionData"] = extensionData;
+
                     foreach (var parameter in parameters)
                     {
-                        if (!method.Parameters.Contains(parameter.Key)) extensionData.Add(parameter.Key, parameter.Value);
+                        if (!method.Parameters.Contains(parameter.Key)) extensionData.Add(parameter.Key, parameter.ToString());
                     }
 
                     foreach (var parameter in extensionData)
                     {
                         parameters.Remove(parameter.Key);
                     }
-
-                    request.ExtensionData = JObject.FromObject(extensionData, serializer);
                 }
-
-                request.Params = JObject.FromObject(parameters, serializer);
             }
             else
             {
@@ -233,29 +233,43 @@ namespace HttpJsonRpc
                             break;
                         default:
                             httpContext.Response.StatusCode = (int)HttpStatusCode.UnsupportedMediaType;
-                            httpContext.Response.Close();
+                            httpContext.Response.OutputStream.Close();
                             return;
                     }
 
                     try
                     {
-                        request = JsonConvert.DeserializeObject<JsonRpcRequest>(requestJson, SerializerSettings);
+                        jRequest = JsonConvert.DeserializeObject<JObject>(requestJson, SerializerSettings);
                     }
                     catch (Exception e)
                     {
-                        await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.ParseError, null, e));
+                        await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ParseError, null, e);
                         return;
                     }
 
-                    method = GetMethod(request.Method);
+                    method = GetMethod(jRequest["method"].ToString());
                 }
             }
 
-            if (request?.Method == null)
+            if (method == null)
             {
                 var info = new JsonRpcInfo();
                 info.Methods = Methods.ToList();
                 await WriteResponseAsync(httpContext, JsonRpcResponse.FromResult(null, info));
+                return;
+            }
+
+            Logger?.LogInformation($"Recieved request:{Environment.NewLine}{jRequest}");
+            //Logger?.LogInformation(jRequest.ToString());
+
+            JsonRpcRequest request = null;
+            try
+            {
+                request = jRequest.ToObject<JsonRpcRequest>(serializer);
+            }
+            catch (Exception e)
+            {
+                await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ParseError, null, e);
                 return;
             }
 
@@ -272,13 +286,7 @@ namespace HttpJsonRpc
             }
             catch (Exception e)
             {
-                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.InternalError, request.Id, e));
-                return;
-            }
-
-            if (method == null)
-            {
-                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.MethodNotFound, request.Id, request.Method));
+                await HandleErrorAsync(httpContext, JsonRpcErrorCodes.InternalError, request, e);
                 return;
             }
 
@@ -304,7 +312,7 @@ namespace HttpJsonRpc
             }
             catch (Exception e)
             {
-                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.ParseError, request.Id, e));
+                await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ParseError, request, e);
                 return;
             }
 
@@ -338,12 +346,12 @@ namespace HttpJsonRpc
             }
             catch (JsonRpcUnauthorizedException e)
             {
-                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.Unauthorized, request.Id, e));
+                await HandleErrorAsync(httpContext, JsonRpcErrorCodes.Unauthorized, request, e);
                 return;
             }
             catch (Exception e)
             {
-                await WriteResponseAsync(httpContext, JsonRpcResponse.FromError(JsonRpcErrorCodes.ExecutionError, request.Id, e));
+                await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ExecutionError, request, e);
                 return;
             }
         }
@@ -360,8 +368,24 @@ namespace HttpJsonRpc
             return method;
         }
 
+        private static async Task HandleErrorAsync(HttpListenerContext context, int errorCode, JsonRpcRequest request, object error)
+        {
+            try
+            {
+                Logger?.LogError(error?.ToString(), "An error occured while handling a request.");
+                var response = JsonRpcResponse.FromError(errorCode, request?.Id, error);
+                await WriteResponseAsync(context, response);
+            }
+            catch (Exception e)
+            {
+                Logger?.LogError(e, "An unexpected error occured while handling another error.");
+            }
+        }
+
         private static async Task WriteResponseAsync(HttpListenerContext context, object result)
         {
+            var output = context.Response.OutputStream;
+
             if (result is Stream resultStream)
             {
                 context.Response.ContentType = "application/octet-stream";
@@ -369,7 +393,7 @@ namespace HttpJsonRpc
 
                 using (resultStream)
                 {
-                    await resultStream.CopyToAsync(context.Response.OutputStream);
+                    await resultStream.CopyToAsync(output);
                 }
             }
             else
@@ -378,15 +402,30 @@ namespace HttpJsonRpc
                 var jsonResponse = JsonConvert.SerializeObject(result, SerializerSettings);
                 var byteResponse = Encoding.UTF8.GetBytes(jsonResponse);
                 context.Response.ContentLength64 = byteResponse.Length;
-                await context.Response.OutputStream.WriteAsync(byteResponse, 0, byteResponse.Length);
+                await output.WriteAsync(byteResponse, 0, byteResponse.Length);
             }
 
-            context.Response.Close();
+            output.Close();
         }
 
         public static void Stop()
         {
             Listener?.Stop();
+        }
+
+        private static void CreateServiceProvider()
+        {
+            var serviceCollection = new ServiceCollection();
+            serviceCollection.AddLogging(configure => configure.AddConsole());
+
+            ConfigureServices?.Invoke(serviceCollection);
+
+            ServiceProvider = serviceCollection.BuildServiceProvider();
+        }
+
+        private static void CreateLogger()
+        {
+            Logger = ServiceProvider.GetService<ILogger<JsonRpc>>();
         }
 
         private static JsonSerializer CreateSerializer()

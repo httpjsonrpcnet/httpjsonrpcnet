@@ -23,11 +23,6 @@ namespace HttpJsonRpc
             return response;
         }
 
-        public static JsonRpcResponse FromError(int code, object id = null, Exception e = null)
-        {
-            return FromError(code, id, e?.ToString());
-        }
-
         public static JsonRpcResponse FromError(int code, object id = null, object data = null)
         {
             var response = Create(id);
