@@ -237,17 +237,21 @@ namespace HttpJsonRpc
                             return;
                     }
 
-                    try
+                    if (!string.IsNullOrEmpty(requestJson))
                     {
-                        jRequest = JsonConvert.DeserializeObject<JObject>(requestJson, SerializerSettings);
-                    }
-                    catch (Exception e)
-                    {
-                        await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ParseError, null, e);
-                        return;
+                        try
+                        {
+                            jRequest = JsonConvert.DeserializeObject<JObject>(requestJson, SerializerSettings);
+                        }
+                        catch (Exception e)
+                        {
+                            await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ParseError, null, e);
+                            return;
+                        }
                     }
 
-                    method = GetMethod(jRequest["method"].ToString());
+                    var methodName = jRequest?["method"]?.ToString();
+                    if (!string.IsNullOrEmpty(methodName)) method = GetMethod(methodName);
                 }
             }
 
@@ -367,12 +371,17 @@ namespace HttpJsonRpc
             return method;
         }
 
-        private static async Task HandleErrorAsync(HttpListenerContext context, int errorCode, JsonRpcRequest request, object error)
+        private static async Task HandleErrorAsync(HttpListenerContext context, int errorCode, JsonRpcRequest request, Exception error)
+        {
+            await HandleErrorAsync(context, errorCode, request, error.ToString());
+        }
+
+        private static async Task HandleErrorAsync(HttpListenerContext context, int errorCode, JsonRpcRequest request, object data)
         {
             try
             {
-                Logger?.LogError(error?.ToString(), "An error occured while handling a request.");
-                var response = JsonRpcResponse.FromError(errorCode, request?.Id, error);
+                Logger?.LogError(data?.ToString(), "An error occured while handling a request.");
+                var response = JsonRpcResponse.FromError(errorCode, request?.Id, data);
                 await WriteResponseAsync(context, response);
             }
             catch (Exception e)
