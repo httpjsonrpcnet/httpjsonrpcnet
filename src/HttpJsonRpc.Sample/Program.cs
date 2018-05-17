@@ -21,6 +21,14 @@ namespace HttpJsonRpc.Sample
             return Task.FromResult(value);
         }
 
+        //[JsonRpcMethod]
+        //public static Task<int> SumAsync(int num1 = 0, int num2 = 0, int num3 = 0)
+        //{
+        //    var sum = num1 + num2 + num3;
+
+        //    return Task.FromResult(sum);
+        //}
+
         [JsonRpcMethod]
         public static Task WriteLineAsync(string message)
         {

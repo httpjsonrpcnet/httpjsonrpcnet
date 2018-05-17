@@ -187,17 +187,16 @@ namespace HttpJsonRpc
                 //Move unknown values into ExtensionData
                 if (method != null)
                 {
-                    var extensionData = new JObject();
-                    jRequest["extensionData"] = extensionData;
-
+                    var extensionData = new Dictionary<string, string>();
                     foreach (var parameter in parameters)
                     {
-                        if (!method.Parameters.Contains(parameter.Key)) extensionData.Add(parameter.Key, parameter.ToString());
+                        if (!method.Parameters.Contains(parameter.Key)) extensionData[parameter.Key] = parameter.Value.ToString();
                     }
 
-                    foreach (var parameter in extensionData)
+                    foreach (var kvp in extensionData)
                     {
-                        parameters.Remove(parameter.Key);
+                        parameters.Remove(kvp.Key);
+                        jRequest[kvp.Key] = kvp.Value;
                     }
                 }
             }
