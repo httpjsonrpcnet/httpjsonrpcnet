@@ -27,50 +27,94 @@ namespace HttpJsonRpc
 
         private static HttpListener Listener { get; set; }
         private static JsonRpcMethodCollection Methods { get; } = new JsonRpcMethodCollection();
-        private static List<Func<HttpListenerContext, Task>> OnReceivedHttpRequestFuncs { get; } = new List<Func<HttpListenerContext, Task>>();
-        private static List<Func<JsonRpcContext, Task>> OnReceivedRequestFuncs { get; } = new List<Func<JsonRpcContext, Task>>();
-        private static List<Func<Exception, Task>> OnErrorFuncs { get; } = new List<Func<Exception, Task>>();
+
+        private static List<Func<HttpListenerContext, Task>> OnReceivedHttpRequestAsyncMethods { get; } = new List<Func<HttpListenerContext, Task>>();
+        private static List<Func<JsonRpcContext, Task>> OnReceivedRequestAsyncMethods { get; } = new List<Func<JsonRpcContext, Task>>();
+        private static List<Func<Exception, Task>> OnErrorAsyncMethods { get; } = new List<Func<Exception, Task>>();
+
+        private static List<Action<HttpListenerContext>> OnReceivedHttpRequestMethods { get; } = new List<Action<HttpListenerContext>>();
+        private static List<Action<JsonRpcContext>> OnReceivedRequestMethods { get; } = new List<Action<JsonRpcContext>>();
+        private static List<Action<Exception>> OnErrorMethods { get; } = new List<Action<Exception>>();
 
         private JsonRpc()
         {
         }
 
-        public static void OnReceivedHttpRequest(Func<HttpListenerContext, Task> func)
+        public static void OnReceivedHttpRequest(Func<HttpListenerContext, Task> method)
         {
-            OnReceivedHttpRequestFuncs.Add(func);
+            OnReceivedHttpRequestAsyncMethods.Add(method);
         }
 
         private static async Task OnReceivedHttpRequestAsync(HttpListenerContext context)
         {
-            foreach (var func in OnReceivedHttpRequestFuncs)
+            foreach (var method in OnReceivedHttpRequestAsyncMethods)
             {
-                await func(context);
+                await method(context);
             }
         }
 
-        public static void OnReceivedRequest(Func<JsonRpcContext, Task> func)
+        public static void OnReceivedRequest(Func<JsonRpcContext, Task> method)
         {
-            OnReceivedRequestFuncs.Add(func);
+            OnReceivedRequestAsyncMethods.Add(method);
         }
 
         private static async Task OnReceivedRequestAsync(JsonRpcContext context)
         {
-            foreach (var func in OnReceivedRequestFuncs)
+            foreach (var method in OnReceivedRequestAsyncMethods)
             {
-                await func(context);
+                await method(context);
             }
         }
 
-        public static void OnError(Func<Exception, Task> func)
+        public static void OnError(Func<Exception, Task> method)
         {
-            OnErrorFuncs.Add(func);
+            OnErrorAsyncMethods.Add(method);
         }
 
-        private static async Task OnExceptionAsync(Exception e, string message)
+        private static async Task OnErrorAsync(Exception e, string message)
         {
-            foreach (var func in OnErrorFuncs)
+            foreach (var method in OnErrorAsyncMethods)
             {
-                await func(e);
+                await method(e);
+            }
+        }
+
+        public static void OnReceivedHttpRequest(Action<HttpListenerContext> method)
+        {
+            OnReceivedHttpRequestMethods.Add(method);
+        }
+
+        private static void OnReceivedHttpRequest(HttpListenerContext context)
+        {
+            foreach (var method in OnReceivedHttpRequestMethods)
+            {
+                method(context);
+            }
+        }
+
+        public static void OnReceivedRequest(Action<JsonRpcContext> method)
+        {
+            OnReceivedRequestMethods.Add(method);
+        }
+
+        private static void OnReceivedRequest(JsonRpcContext context)
+        {
+            foreach (var method in OnReceivedRequestMethods)
+            {
+                method(context);
+            }
+        }
+
+        public static void OnError(Action<Exception> method)
+        {
+            OnErrorMethods.Add(method);
+        }
+
+        private static void OnError(Exception e, string message)
+        {
+            foreach (var method in OnErrorMethods)
+            {
+                method(e);
             }
 
             CreateLogger()?.LogError(e, message);
@@ -155,7 +199,9 @@ namespace HttpJsonRpc
                 }
                 catch (Exception e)
                 {
-                    await OnExceptionAsync(e, "An error occured while accepting a request.");
+                    var message = "An error occured while accepting a request.";
+                    OnError(e, message);
+                    await OnErrorAsync(e, message);
                 }
             }
         }
@@ -164,6 +210,7 @@ namespace HttpJsonRpc
         {
             try
             {
+                OnReceivedHttpRequest(httpContext);
                 await OnReceivedHttpRequestAsync(httpContext);
             }
             catch (Exception e)
@@ -302,6 +349,7 @@ namespace HttpJsonRpc
 
             try
             {
+                OnReceivedRequest(jsonRpcContext);
                 await OnReceivedRequestAsync(jsonRpcContext);
             }
             catch (Exception e)
@@ -394,13 +442,18 @@ namespace HttpJsonRpc
         {
             try
             {
-                await OnExceptionAsync(error, "An error occured while handling a request.");
+                var message = "An error occured while handling a request.";
+                OnError(error, message);
+                await OnErrorAsync(error, message);
+
                 var response = JsonRpcResponse.FromError(errorCode, request?.Id, error.ToString());
                 await WriteResponseAsync(context, response);
             }
             catch (Exception e)
             {
-                await OnExceptionAsync(e, "An unexpected error occured while handling another error.");
+                var message = "An unexpected error occured while handling another error.";
+                OnError(e, message);
+                await OnErrorAsync(e, message);
             }
         }
 
