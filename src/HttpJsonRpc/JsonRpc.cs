@@ -7,7 +7,6 @@ using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -17,8 +16,7 @@ namespace HttpJsonRpc
 {
     public class JsonRpc
     {
-        public static IServiceProvider ServiceProvider { get; set; }
-        public static Action<ServiceCollection> ConfigureServices { get; set; }
+        public static ILoggerFactory LoggerFactory { get; set; }
 
         public static JsonSerializerSettings SerializerSettings { get; set; } = new JsonSerializerSettings
         {
@@ -27,7 +25,6 @@ namespace HttpJsonRpc
             Formatting = Formatting.Indented
         };
 
-        private static ILogger Logger { get; set; }
         private static HttpListener Listener { get; set; }
         private static JsonRpcMethodCollection Methods { get; } = new JsonRpcMethodCollection();
         private static List<Func<HttpListenerContext, Task>> OnReceivedHttpRequestFuncs { get; } = new List<Func<HttpListenerContext, Task>>();
@@ -108,9 +105,6 @@ namespace HttpJsonRpc
                 }
             }
 
-            CreateServiceProvider();
-            CreateLogger();
-
             if (address == null) address = "http://localhost:5000/";
             if (!address.EndsWith("/")) address += "/";
 
@@ -118,7 +112,7 @@ namespace HttpJsonRpc
             Listener.Prefixes.Add(address);
             Listener.Start();
 
-            Logger?.LogInformation($"Listening for JSON-RPC requests on {address}");
+            CreateLogger()?.LogInformation($"Listening for JSON-RPC requests on {address}");
 
             while (Listener.IsListening)
             {
@@ -129,7 +123,7 @@ namespace HttpJsonRpc
                 }
                 catch (Exception e)
                 {
-                    Logger?.LogError(e, "An error occured while accepting a request.");
+                    CreateLogger()?.LogError(e, "An error occured while accepting a request.");
                 }
             }
         }
@@ -262,8 +256,6 @@ namespace HttpJsonRpc
                 return;
             }
 
-            Logger?.LogInformation($"Recieved request:{Environment.NewLine}{jRequest}");
-
             JsonRpcRequest request = null;
             try
             {
@@ -379,13 +371,13 @@ namespace HttpJsonRpc
         {
             try
             {
-                Logger?.LogError(data?.ToString(), "An error occured while handling a request.");
+                CreateLogger()?.LogError(data?.ToString(), "An error occured while handling a request.");
                 var response = JsonRpcResponse.FromError(errorCode, request?.Id, data);
                 await WriteResponseAsync(context, response);
             }
             catch (Exception e)
             {
-                Logger?.LogError(e, "An unexpected error occured while handling another error.");
+                CreateLogger()?.LogError(e, "An unexpected error occured while handling another error.");
             }
         }
 
@@ -407,7 +399,6 @@ namespace HttpJsonRpc
             {
                 context.Response.ContentType = "application/json";
                 var jsonResponse = JsonConvert.SerializeObject(result, SerializerSettings);
-                Logger?.LogInformation($"Response:{Environment.NewLine}{jsonResponse}");
 
                 var byteResponse = Encoding.UTF8.GetBytes(jsonResponse);
                 context.Response.ContentLength64 = byteResponse.Length;
@@ -422,24 +413,14 @@ namespace HttpJsonRpc
             Listener?.Stop();
         }
 
-        private static void CreateServiceProvider()
-        {
-            var serviceCollection = new ServiceCollection();
-            serviceCollection.AddLogging(configure => configure.AddConsole());
-
-            ConfigureServices?.Invoke(serviceCollection);
-
-            ServiceProvider = serviceCollection.BuildServiceProvider();
-        }
-
-        private static void CreateLogger()
-        {
-            Logger = ServiceProvider.GetService<ILogger<JsonRpc>>();
-        }
-
         private static JsonSerializer CreateSerializer()
         {
             return JsonSerializer.Create(SerializerSettings);
+        }
+
+        private static ILogger<JsonRpc> CreateLogger()
+        {
+            return LoggerFactory?.CreateLogger<JsonRpc>();
         }
     }
 }

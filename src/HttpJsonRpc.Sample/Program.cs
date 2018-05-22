@@ -1,6 +1,8 @@
 ﻿using System;
 using System.IO;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Serilog;
 
 namespace HttpJsonRpc.Sample
 {
@@ -8,6 +10,13 @@ namespace HttpJsonRpc.Sample
     {
         static void Main(string[] args)
         {
+            //Configure JsonRpc to use Serilog
+            Log.Logger = new LoggerConfiguration()
+                .WriteTo.Console()
+                .CreateLogger();
+
+            JsonRpc.LoggerFactory = new LoggerFactory().AddSerilog();
+
             JsonRpc.Start();
             Console.ReadLine();
             JsonRpc.Stop();
