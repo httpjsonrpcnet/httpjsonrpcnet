@@ -29,6 +29,7 @@ namespace HttpJsonRpc
         private static JsonRpcMethodCollection Methods { get; } = new JsonRpcMethodCollection();
         private static List<Func<HttpListenerContext, Task>> OnReceivedHttpRequestFuncs { get; } = new List<Func<HttpListenerContext, Task>>();
         private static List<Func<JsonRpcContext, Task>> OnReceivedRequestFuncs { get; } = new List<Func<JsonRpcContext, Task>>();
+        private static List<Func<Exception, Task>> OnErrorFuncs { get; } = new List<Func<Exception, Task>>();
 
         private JsonRpc()
         {
@@ -39,9 +40,40 @@ namespace HttpJsonRpc
             OnReceivedHttpRequestFuncs.Add(func);
         }
 
+        private static async Task OnReceivedHttpRequestAsync(HttpListenerContext context)
+        {
+            foreach (var func in OnReceivedHttpRequestFuncs)
+            {
+                await func(context);
+            }
+        }
+
         public static void OnReceivedRequest(Func<JsonRpcContext, Task> func)
         {
             OnReceivedRequestFuncs.Add(func);
+        }
+
+        private static async Task OnReceivedRequestAsync(JsonRpcContext context)
+        {
+            foreach (var func in OnReceivedRequestFuncs)
+            {
+                await func(context);
+            }
+        }
+
+        public static void OnError(Func<Exception, Task> func)
+        {
+            OnErrorFuncs.Add(func);
+        }
+
+        private static async Task OnExceptionAsync(Exception e, string message)
+        {
+            foreach (var func in OnErrorFuncs)
+            {
+                await func(e);
+            }
+
+            CreateLogger()?.LogError(e, message);
         }
 
         public static void RegisterMethods(Assembly fromAssembly)
@@ -123,7 +155,7 @@ namespace HttpJsonRpc
                 }
                 catch (Exception e)
                 {
-                    CreateLogger()?.LogError(e, "An error occured while accepting a request.");
+                    await OnExceptionAsync(e, "An error occured while accepting a request.");
                 }
             }
         }
@@ -132,17 +164,15 @@ namespace HttpJsonRpc
         {
             try
             {
-                foreach (var f in OnReceivedHttpRequestFuncs)
-                {
-                    await f(httpContext);
-                    if (httpContext.Response.ContentLength64 != 0) return;
-                }
+                await OnReceivedHttpRequestAsync(httpContext);
             }
             catch (Exception e)
             {
                 await HandleErrorAsync(httpContext, JsonRpcErrorCodes.InternalError, null, e);
                 return;
             }
+
+            if (httpContext.Response.ContentLength64 != 0) return;
 
             if (!new[] { "GET", "POST" }.Contains(httpContext.Request.HttpMethod, StringComparer.InvariantCultureIgnoreCase))
             {
@@ -272,17 +302,15 @@ namespace HttpJsonRpc
 
             try
             {
-                foreach (var f in OnReceivedRequestFuncs)
-                {
-                    await f(jsonRpcContext);
-                    if (jsonRpcContext.HttpContext.Response.ContentLength64 != 0) return;
-                }
+                await OnReceivedRequestAsync(jsonRpcContext);
             }
             catch (Exception e)
             {
                 await HandleErrorAsync(httpContext, JsonRpcErrorCodes.InternalError, request, e);
                 return;
             }
+
+            if (jsonRpcContext.HttpContext.Response.ContentLength64 != 0) return;
 
             //Prepare the method parameters
             var parameterValues = new List<object>();
@@ -364,20 +392,15 @@ namespace HttpJsonRpc
 
         private static async Task HandleErrorAsync(HttpListenerContext context, int errorCode, JsonRpcRequest request, Exception error)
         {
-            await HandleErrorAsync(context, errorCode, request, error.ToString());
-        }
-
-        private static async Task HandleErrorAsync(HttpListenerContext context, int errorCode, JsonRpcRequest request, object data)
-        {
             try
             {
-                CreateLogger()?.LogError(data?.ToString(), "An error occured while handling a request.");
-                var response = JsonRpcResponse.FromError(errorCode, request?.Id, data);
+                await OnExceptionAsync(error, "An error occured while handling a request.");
+                var response = JsonRpcResponse.FromError(errorCode, request?.Id, error.ToString());
                 await WriteResponseAsync(context, response);
             }
             catch (Exception e)
             {
-                CreateLogger()?.LogError(e, "An unexpected error occured while handling another error.");
+                await OnExceptionAsync(e, "An unexpected error occured while handling another error.");
             }
         }
 

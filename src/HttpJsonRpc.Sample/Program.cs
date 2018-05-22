@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -17,6 +18,13 @@ namespace HttpJsonRpc.Sample
 
             JsonRpc.LoggerFactory = new LoggerFactory().AddSerilog();
 
+            //Custom error handling
+            //JsonRpc.OnError(e =>
+            //{
+            //    Debug.WriteLine(e.ToString());
+            //    return Task.CompletedTask;
+            //});
+
             JsonRpc.Start();
             Console.ReadLine();
             JsonRpc.Stop();
@@ -29,14 +37,6 @@ namespace HttpJsonRpc.Sample
             var value = (num1 + num2) * multiplier;
             return Task.FromResult(value);
         }
-
-        //[JsonRpcMethod]
-        //public static Task<int> SumAsync(int num1 = 0, int num2 = 0, int num3 = 0)
-        //{
-        //    var sum = num1 + num2 + num3;
-
-        //    return Task.FromResult(sum);
-        //}
 
         [JsonRpcMethod]
         public static Task WriteLineAsync(string message)
