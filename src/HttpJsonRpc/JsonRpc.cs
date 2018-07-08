@@ -228,104 +228,47 @@ namespace HttpJsonRpc
                 return;
             }
 
-            JObject jRequest = null;
-            JsonRpcMethod method = null;
-            var serializer = CreateSerializer();
-
+            string jsonRequest = null;
             if (httpContext.Request.QueryString.Count > 0)
             {
-                jRequest = new JObject();
-                var parameters = new JObject();
-                jRequest["params"] = parameters;
-
-                var queryString = httpContext.Request.QueryString;
-                foreach (var key in queryString.AllKeys)
-                {
-                    if (key == null) continue; ;
-                    var value = queryString[key];
-
-                    if (key == "jsonrpc" || key == "id" || key == "method")
-                    {
-                        jRequest[key] = value;
-                        continue;
-                    }
-
-                    parameters[key] = value;
-                }
-
-                method = GetMethod(jRequest["method"].ToString());
-
-                //Move unknown values into ExtensionData
-                if (method != null)
-                {
-                    var extensionData = new Dictionary<string, string>();
-                    foreach (var parameter in parameters)
-                    {
-                        if (!method.Parameters.Contains(parameter.Key)) extensionData[parameter.Key] = parameter.Value.ToString();
-                    }
-
-                    foreach (var kvp in extensionData)
-                    {
-                        parameters.Remove(kvp.Key);
-                        jRequest[kvp.Key] = kvp.Value;
-                    }
-                }
+                jsonRequest = GetRequestFromQueryString(httpContext);
             }
             else
             {
                 var contentType = httpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
                 if (contentType != null)
                 {
-                    string requestJson = null;
-
                     switch (contentType)
                     {
                         case "application/json":
-                            using (var reader = new StreamReader(httpContext.Request.InputStream))
-                            {
-                                requestJson = await reader.ReadToEndAsync();
-                            }
+                            jsonRequest = await GetRequestFromBodyAsync(httpContext);
                             break;
                         case "multipart/form-data":
-                            using (var reader = new StreamReader(httpContext.Request.InputStream))
-                            {
-                                var boundary = await reader.ReadLineAsync();
-                                var multipartString = await reader.ReadToEndAsync();
-                                var parts = multipartString.Split(new[] { boundary }, StringSplitOptions.RemoveEmptyEntries);
-                                var requestPartHeader = "Content-Disposition: form-data; name=\"request\"";
-                                var requestPart = parts.FirstOrDefault(p => p.StartsWith(requestPartHeader));
-
-                                if (requestPart != null)
-                                {
-                                    requestJson = requestPart.Substring(requestPartHeader.Length).Trim();
-                                }
-                            }
+                            jsonRequest = await GetRequestFromFormAsync(httpContext);
                             break;
                         default:
                             httpContext.Response.StatusCode = (int)HttpStatusCode.UnsupportedMediaType;
                             httpContext.Response.OutputStream.Close();
                             return;
                     }
-
-                    if (!string.IsNullOrEmpty(requestJson))
-                    {
-                        try
-                        {
-                            jRequest = JsonConvert.DeserializeObject<JObject>(requestJson, SerializerSettings);
-                        }
-                        catch (Exception e)
-                        {
-                            await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ParseError, null, e);
-                            return;
-                        }
-                    }
-
-                    var methodName = jRequest?["method"]?.ToString();
-                    if (!string.IsNullOrEmpty(methodName)) method = GetMethod(methodName);
                 }
             }
 
-            if (method == null)
+            JsonRpcRequest request = null;
+            if (!string.IsNullOrEmpty(jsonRequest))
+            {
+                try
+                {
+                    request = JsonConvert.DeserializeObject<JsonRpcRequest>(jsonRequest, SerializerSettings);
+                }
+                catch (Exception e)
+                {
+                    await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ParseError, null, e);
+                    return;
+                }
+            }
+
+            if (string.IsNullOrEmpty(request?.Method))
             {
                 var info = new JsonRpcInfo();
                 info.Methods = Methods.ToList();
@@ -333,14 +276,11 @@ namespace HttpJsonRpc
                 return;
             }
 
-            JsonRpcRequest request = null;
-            try
+            var method = GetMethod(request.Method);
+            if (method == null)
             {
-                request = jRequest.ToObject<JsonRpcRequest>(serializer);
-            }
-            catch (Exception e)
-            {
-                await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ParseError, null, e);
+                var notFoundResponse = JsonRpcResponse.FromError(JsonRpcErrorCodes.MethodNotFound, request.Id, request.Method);
+                await WriteResponseAsync(httpContext, notFoundResponse);
                 return;
             }
 
@@ -365,6 +305,7 @@ namespace HttpJsonRpc
             try
             {
                 var parameters = method.MethodInfo.GetParameters();
+                var serializer = CreateSerializer();
 
                 foreach (var parameter in parameters)
                 {
@@ -424,6 +365,80 @@ namespace HttpJsonRpc
                 await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ExecutionError, request, e);
                 return;
             }
+        }
+
+        private static async Task<string> GetRequestFromBodyAsync(HttpListenerContext httpContext)
+        {
+            var jsonRequest = string.Empty;
+            using (var reader = new StreamReader(httpContext.Request.InputStream))
+            {
+                jsonRequest = await reader.ReadToEndAsync();
+            }
+
+            return jsonRequest;
+        }
+
+        private static string GetRequestFromQueryString(HttpListenerContext httpContext)
+        {
+            var jRequest = new JObject();
+            var parameters = new JObject();
+            jRequest["params"] = parameters;
+
+            var queryString = httpContext.Request.QueryString;
+            foreach (var key in queryString.AllKeys)
+            {
+                if (key == null) continue; ;
+                var value = queryString[key];
+
+                if (key == "jsonrpc" || key == "id" || key == "method")
+                {
+                    jRequest[key] = value;
+                    continue;
+                }
+
+                parameters[key] = value;
+            }
+
+            var method = GetMethod(jRequest["method"].ToString());
+
+            //Move unknown values into ExtensionData
+            if (method != null)
+            {
+                var extensionData = new Dictionary<string, string>();
+                foreach (var parameter in parameters)
+                {
+                    if (!method.Parameters.Contains(parameter.Key)) extensionData[parameter.Key] = parameter.Value.ToString();
+                }
+
+                foreach (var kvp in extensionData)
+                {
+                    parameters.Remove(kvp.Key);
+                    jRequest[kvp.Key] = kvp.Value;
+                }
+            }
+
+            return jRequest.ToString();
+        }
+
+        private static async Task<string> GetRequestFromFormAsync(HttpListenerContext httpContext)
+        {
+            var jsonRequest = string.Empty;
+
+            using (var reader = new StreamReader(httpContext.Request.InputStream))
+            {
+                var boundary = await reader.ReadLineAsync();
+                var multipartString = await reader.ReadToEndAsync();
+                var parts = multipartString.Split(new[] { boundary }, StringSplitOptions.RemoveEmptyEntries);
+                var requestPartHeader = "Content-Disposition: form-data; name=\"request\"";
+                var requestPart = parts.FirstOrDefault(p => p.StartsWith(requestPartHeader));
+
+                if (requestPart != null)
+                {
+                    jsonRequest = requestPart.Substring(requestPartHeader.Length).Trim();
+                }
+            }
+
+            return jsonRequest;
         }
 
         private static JsonRpcMethod GetMethod(string name)
