@@ -476,14 +476,24 @@ namespace HttpJsonRpc
         {
             var output = context.Response.OutputStream;
 
-            if (result is Stream resultStream)
+            if (result is JsonRpcStreamResult streamResult)
+            {
+                context.Response.ContentType = streamResult.ContentType;
+                context.Response.ContentLength64 = streamResult.Stream.Length;
+
+                using (streamResult.Stream)
+                {
+                    await streamResult.Stream.CopyToAsync(output);
+                }
+            }
+            else if (result is Stream stream)
             {
                 context.Response.ContentType = "application/octet-stream";
-                context.Response.ContentLength64 = resultStream.Length;
+                context.Response.ContentLength64 = stream.Length;
 
-                using (resultStream)
+                using (stream)
                 {
-                    await resultStream.CopyToAsync(output);
+                    await stream.CopyToAsync(output);
                 }
             }
             else
