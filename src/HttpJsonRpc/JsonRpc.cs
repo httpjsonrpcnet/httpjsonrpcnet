@@ -66,19 +66,6 @@ namespace HttpJsonRpc
             }
         }
 
-        public static void OnError(Func<Exception, Task> method)
-        {
-            OnErrorAsyncMethods.Add(method);
-        }
-
-        private static async Task OnErrorAsync(Exception e, string message)
-        {
-            foreach (var method in OnErrorAsyncMethods)
-            {
-                await method(e);
-            }
-        }
-
         public static void OnReceivedHttpRequest(Action<HttpListenerContext> method)
         {
             OnReceivedHttpRequestMethods.Add(method);
@@ -105,6 +92,28 @@ namespace HttpJsonRpc
             }
         }
 
+        public static void OnErrorAsync(Func<Exception, Task> method)
+        {
+            OnErrorAsyncMethods.Add(method);
+        }
+
+        private static async Task OnErrorAsync(Exception e, string message)
+        {
+            var logger = CreateLogger();
+
+            foreach (var method in OnErrorAsyncMethods)
+            {
+                try
+                {
+                    await method(e);
+                }
+                catch (Exception e2)
+                {
+                    logger?.LogError(e2, "An error occured while handling another error.");
+                }
+            }
+        }
+
         public static void OnError(Action<Exception> method)
         {
             OnErrorMethods.Add(method);
@@ -112,12 +121,21 @@ namespace HttpJsonRpc
 
         private static void OnError(Exception e, string message)
         {
+            var logger = CreateLogger();
+
             foreach (var method in OnErrorMethods)
             {
-                method(e);
+                try
+                {
+                    method(e);
+                }
+                catch (Exception e2)
+                {
+                    logger?.LogError(e2, "An error occured while handling another error.");
+                }
             }
 
-            CreateLogger()?.LogError(e, message);
+            logger?.LogError(e, message);
         }
 
         public static void RegisterMethods(Assembly fromAssembly)
@@ -455,18 +473,18 @@ namespace HttpJsonRpc
 
         private static async Task HandleErrorAsync(HttpListenerContext context, int errorCode, JsonRpcRequest request, Exception error)
         {
+            var message = "An error occured while handling a request.";
+            OnError(error, message);
+            await OnErrorAsync(error, message);
+
             try
             {
-                var message = "An error occured while handling a request.";
-                OnError(error, message);
-                await OnErrorAsync(error, message);
-
                 var response = JsonRpcResponse.FromError(errorCode, request?.Id, error.ToString());
                 await WriteResponseAsync(context, response);
             }
             catch (Exception e)
             {
-                var message = "An unexpected error occured while handling another error.";
+                message = "An unexpected error occured while handling another error.";
                 OnError(e, message);
                 await OnErrorAsync(e, message);
             }
