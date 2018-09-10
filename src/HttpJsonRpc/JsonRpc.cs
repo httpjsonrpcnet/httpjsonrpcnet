@@ -353,17 +353,6 @@ namespace HttpJsonRpc
                     var methodTask = (Task) method.MethodInfo.Invoke(null, parameterValues.ToArray());
                     await methodTask;
                     var result = methodTask.GetType().GetProperty("Result")?.GetValue(methodTask);
-
-                    if (!(result is Stream))
-                    {
-                        result = new JsonRpcResponse
-                        {
-                            Id = request.Id,
-                            JsonRpc = "2.0",
-                            Result = result
-                        };
-                    }
-
                     await WriteResponseAsync(httpContext, result);
 
                     return;
@@ -524,8 +513,15 @@ namespace HttpJsonRpc
             }
             else
             {
+                var response = new JsonRpcResponse
+                {
+                    Id = JsonRpcContext.Current.Request.Id,
+                    JsonRpc = "2.0",
+                    Result = result
+                };
+
                 context.Response.ContentType = "application/json";
-                var jsonResponse = JsonConvert.SerializeObject(result, SerializerSettings);
+                var jsonResponse = JsonConvert.SerializeObject(response, SerializerSettings);
 
                 var byteResponse = Encoding.UTF8.GetBytes(jsonResponse);
                 context.Response.ContentLength64 = byteResponse.Length;

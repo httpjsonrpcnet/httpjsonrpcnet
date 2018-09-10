@@ -56,9 +56,14 @@ namespace HttpJsonRpc.Sample
         }
 
         [JsonRpcMethod]
-        public static Task<Stream> DownloadAsync(string fileName)
+        public static Task<JsonRpcStreamResult> DownloadAsync(string fileName)
         {
-            return Task.FromResult((Stream) File.OpenRead(fileName));
+            var file = File.OpenRead(fileName);
+
+            //Assume we are downloading a jpeg
+            var result = new JsonRpcStreamResult(file, "image/jpeg");
+
+            return Task.FromResult(result);
         }
     }
 }
