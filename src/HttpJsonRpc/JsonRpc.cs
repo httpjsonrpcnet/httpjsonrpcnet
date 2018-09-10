@@ -497,7 +497,11 @@ namespace HttpJsonRpc
             if (result is JsonRpcStreamResult streamResult)
             {
                 context.Response.ContentType = streamResult.ContentType;
-                context.Response.ContentLength64 = streamResult.Stream.Length;
+
+                if (streamResult.Stream.CanSeek)
+                {
+                    context.Response.ContentLength64 = streamResult.Stream.Length;
+                }
 
                 using (streamResult.Stream)
                 {
@@ -507,7 +511,11 @@ namespace HttpJsonRpc
             else if (result is Stream stream)
             {
                 context.Response.ContentType = "application/octet-stream";
-                context.Response.ContentLength64 = stream.Length;
+
+                if (stream.CanSeek)
+                {
+                    context.Response.ContentLength64 = stream.Length;
+                }
 
                 using (stream)
                 {
