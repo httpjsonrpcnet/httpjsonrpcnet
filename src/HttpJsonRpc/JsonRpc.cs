@@ -199,7 +199,7 @@ namespace HttpJsonRpc
                 }
             }
 
-            if (address == null) address = "http://localhost:5000/";
+            if (address == null) address = "http://127.0.0.1:5000/";
             if (!address.EndsWith("/")) address += "/";
 
             Listener = new HttpListener();
