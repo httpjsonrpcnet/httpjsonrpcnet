@@ -19,11 +19,10 @@ namespace HttpJsonRpc.Sample
             JsonRpc.LoggerFactory = new LoggerFactory().AddSerilog();
 
             //Custom error handling
-            //JsonRpc.OnError(e =>
-            //{
-            //    Debug.WriteLine(e.ToString());
-            //    return Task.CompletedTask;
-            //});
+            JsonRpc.OnError(e =>
+            {
+                Debug.WriteLine(e.ToString());
+            });
 
             JsonRpc.Start();
             Console.ReadLine();

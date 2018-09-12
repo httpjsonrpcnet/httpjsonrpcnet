@@ -246,6 +246,12 @@ namespace HttpJsonRpc
                 return;
             }
 
+            if (httpContext.Request.RawUrl.EndsWith("favicon.ico"))
+            {
+                httpContext.Response.OutputStream.Close();
+                return;
+            }
+
             string jsonRequest = null;
             if (httpContext.Request.QueryString.Count > 0)
             {
@@ -273,31 +279,30 @@ namespace HttpJsonRpc
             }
 
             JsonRpcRequest request = null;
-            if (!string.IsNullOrEmpty(jsonRequest))
+            try
             {
-                try
-                {
-                    request = JsonConvert.DeserializeObject<JsonRpcRequest>(jsonRequest, SerializerSettings);
-                }
-                catch (Exception e)
-                {
-                    await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ParseError, null, e);
-                    return;
-                }
+                request = JsonConvert.DeserializeObject<JsonRpcRequest>(jsonRequest, SerializerSettings);
+                if (request == null) throw new ArgumentException("Failed to parse JSON request.");
             }
-
-            if (string.IsNullOrEmpty(request?.Method))
+            catch (Exception e)
             {
-                var info = new JsonRpcInfo();
-                info.Methods = Methods.ToList();
-                await WriteResponseAsync(httpContext, JsonRpcResponse.FromResult(null, info));
+                await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ParseError, null, e);
                 return;
             }
+
+            //Commented out for now because it's a security vulnerability to list all methods. Will re-add feature when a better way is designed.
+            //if (string.IsNullOrEmpty(request?.Method))
+            //{
+            //    var info = new JsonRpcInfo();
+            //    info.Methods = Methods.ToList();
+            //    await WriteResponseAsync(httpContext, JsonRpcResponse.FromResult(null, info));
+            //    return;
+            //}
 
             var method = GetMethod(request.Method);
             if (method == null)
             {
-                var notFoundResponse = JsonRpcResponse.FromError(JsonRpcErrorCodes.MethodNotFound, request.Id, request.Method);
+                var notFoundResponse = JsonRpcResponse.FromError(JsonRpcErrorCodes.MethodNotFound, request?.Id, request?.Method);
                 await WriteResponseAsync(httpContext, notFoundResponse);
                 return;
             }
@@ -376,7 +381,7 @@ namespace HttpJsonRpc
 
         private static async Task<string> GetRequestFromBodyAsync(HttpListenerContext httpContext)
         {
-            var jsonRequest = string.Empty;
+            string jsonRequest;
             using (var reader = new StreamReader(httpContext.Request.InputStream))
             {
                 jsonRequest = await reader.ReadToEndAsync();
@@ -515,7 +520,7 @@ namespace HttpJsonRpc
             {
                 var response = new JsonRpcResponse
                 {
-                    Id = JsonRpcContext.Current.Request.Id,
+                    Id = JsonRpcContext.Current?.Request?.Id,
                     JsonRpc = "2.0",
                     Result = result
                 };
