@@ -13,14 +13,8 @@ namespace HttpJsonRpc
             set => _Current.Value = value;
         }
 
-        public HttpListenerContext HttpContext { get; }
-        public JsonRpcRequest Request { get; }
+        public HttpListenerContext HttpContext { get; set; }
+        public JsonRpcRequest Request { get; set; }
         public Dictionary<string, object> Values { get; } = new Dictionary<string, object>();
-
-        public JsonRpcContext(HttpListenerContext httpContext, JsonRpcRequest request)
-        {
-            HttpContext = httpContext;
-            Request = request;
-        }
     }
 }

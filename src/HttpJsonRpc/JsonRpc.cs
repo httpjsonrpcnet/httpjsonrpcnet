@@ -58,11 +58,11 @@ namespace HttpJsonRpc
             OnReceivedRequestAsyncMethods.Add(method);
         }
 
-        private static async Task OnReceivedRequestAsync(JsonRpcContext context)
+        private static async Task OnReceivedRequestAsync()
         {
             foreach (var method in OnReceivedRequestAsyncMethods)
             {
-                await method(context);
+                await method(JsonRpcContext.Current);
             }
         }
 
@@ -84,11 +84,11 @@ namespace HttpJsonRpc
             OnReceivedRequestMethods.Add(method);
         }
 
-        private static void OnReceivedRequest(JsonRpcContext context)
+        private static void OnReceivedRequest()
         {
             foreach (var method in OnReceivedRequestMethods)
             {
-                method(context);
+                method(JsonRpcContext.Current);
             }
         }
 
@@ -213,7 +213,8 @@ namespace HttpJsonRpc
                 try
                 {
                     var httpContext = await Listener.GetContextAsync();
-                    HandleRequest(httpContext);
+                    JsonRpcContext.Current = new JsonRpcContext { HttpContext = httpContext };
+                    HandleRequest();
                 }
                 catch (Exception e)
                 {
@@ -224,8 +225,10 @@ namespace HttpJsonRpc
             }
         }
 
-        private static async void HandleRequest(HttpListenerContext httpContext)
+        private static async void HandleRequest()
         {
+            var httpContext = JsonRpcContext.Current.HttpContext;
+
             try
             {
                 OnReceivedHttpRequest(httpContext);
@@ -233,7 +236,7 @@ namespace HttpJsonRpc
             }
             catch (Exception e)
             {
-                await HandleErrorAsync(httpContext, JsonRpcErrorCodes.InternalError, null, e);
+                await HandleErrorAsync(JsonRpcErrorCodes.InternalError, e);
                 return;
             }
 
@@ -255,7 +258,7 @@ namespace HttpJsonRpc
             string jsonRequest = null;
             if (httpContext.Request.QueryString.Count > 0)
             {
-                jsonRequest = GetRequestFromQueryString(httpContext);
+                jsonRequest = GetRequestFromQueryString();
             }
             else
             {
@@ -265,10 +268,10 @@ namespace HttpJsonRpc
                     switch (contentType)
                     {
                         case "application/json":
-                            jsonRequest = await GetRequestFromBodyAsync(httpContext);
+                            jsonRequest = await GetRequestFromBodyAsync();
                             break;
                         case "multipart/form-data":
-                            jsonRequest = await GetRequestFromFormAsync(httpContext);
+                            jsonRequest = await GetRequestFromFormAsync();
                             break;
                         default:
                             httpContext.Response.StatusCode = (int)HttpStatusCode.UnsupportedMediaType;
@@ -286,9 +289,11 @@ namespace HttpJsonRpc
             }
             catch (Exception e)
             {
-                await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ParseError, null, e);
+                await HandleErrorAsync(JsonRpcErrorCodes.ParseError, e);
                 return;
             }
+
+            JsonRpcContext.Current.Request = request;
 
             //Commented out for now because it's a security vulnerability to list all methods. Will re-add feature when a better way is designed.
             //if (string.IsNullOrEmpty(request?.Method))
@@ -302,26 +307,23 @@ namespace HttpJsonRpc
             var method = GetMethod(request.Method);
             if (method == null)
             {
-                var notFoundResponse = JsonRpcResponse.FromError(JsonRpcErrorCodes.MethodNotFound, request?.Id, request?.Method);
-                await WriteResponseAsync(httpContext, notFoundResponse);
+                await WriteResponseAsync(httpContext, JsonRpcError.Create(JsonRpcErrorCodes.MethodNotFound, request.Method));
                 return;
             }
 
-            var jsonRpcContext = new JsonRpcContext(httpContext, request);
-            JsonRpcContext.Current = jsonRpcContext;
 
             try
             {
-                OnReceivedRequest(jsonRpcContext);
-                await OnReceivedRequestAsync(jsonRpcContext);
+                OnReceivedRequest();
+                await OnReceivedRequestAsync();
             }
             catch (Exception e)
             {
-                await HandleErrorAsync(httpContext, JsonRpcErrorCodes.InternalError, request, e);
+                await HandleErrorAsync(JsonRpcErrorCodes.InternalError, e);
                 return;
             }
 
-            if (jsonRpcContext.HttpContext.Response.ContentLength64 != 0) return;
+            if (httpContext.Response.ContentLength64 != 0) return;
 
             //Prepare the method parameters
             var parameterValues = new List<object>();
@@ -346,7 +348,7 @@ namespace HttpJsonRpc
             }
             catch (Exception e)
             {
-                await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ParseError, request, e);
+                await HandleErrorAsync(JsonRpcErrorCodes.ParseError, e);
                 return;
             }
 
@@ -358,7 +360,7 @@ namespace HttpJsonRpc
                     var methodTask = (Task) method.MethodInfo.Invoke(null, parameterValues.ToArray());
                     await methodTask;
                     var result = methodTask.GetType().GetProperty("Result")?.GetValue(methodTask);
-                    await WriteResponseAsync(httpContext, result);
+                    await WriteResponseAsync(result);
 
                     return;
                 }
@@ -369,18 +371,20 @@ namespace HttpJsonRpc
             }
             catch (JsonRpcUnauthorizedException e)
             {
-                await HandleErrorAsync(httpContext, JsonRpcErrorCodes.Unauthorized, request, e);
+                await HandleErrorAsync(JsonRpcErrorCodes.Unauthorized, e);
                 return;
             }
             catch (Exception e)
             {
-                await HandleErrorAsync(httpContext, JsonRpcErrorCodes.ExecutionError, request, e);
+                await HandleErrorAsync(JsonRpcErrorCodes.ExecutionError, e);
                 return;
             }
         }
 
-        private static async Task<string> GetRequestFromBodyAsync(HttpListenerContext httpContext)
+        private static async Task<string> GetRequestFromBodyAsync()
         {
+            var httpContext = JsonRpcContext.Current.HttpContext;
+
             string jsonRequest;
             using (var reader = new StreamReader(httpContext.Request.InputStream))
             {
@@ -390,8 +394,10 @@ namespace HttpJsonRpc
             return jsonRequest;
         }
 
-        private static string GetRequestFromQueryString(HttpListenerContext httpContext)
+        private static string GetRequestFromQueryString()
         {
+            var httpContext = JsonRpcContext.Current.HttpContext;
+
             var jRequest = new JObject();
             var parameters = new JObject();
             jRequest["params"] = parameters;
@@ -432,8 +438,10 @@ namespace HttpJsonRpc
             return jRequest.ToString();
         }
 
-        private static async Task<string> GetRequestFromFormAsync(HttpListenerContext httpContext)
+        private static async Task<string> GetRequestFromFormAsync()
         {
+            var httpContext = JsonRpcContext.Current.HttpContext;
+
             var jsonRequest = string.Empty;
 
             using (var reader = new StreamReader(httpContext.Request.InputStream))
@@ -465,36 +473,36 @@ namespace HttpJsonRpc
             return method;
         }
 
-        private static async Task HandleErrorAsync(HttpListenerContext context, int errorCode, JsonRpcRequest request, Exception error)
+        private static async Task HandleErrorAsync(int errorCode, Exception error)
         {
-            var message = "An error occured while handling a request.";
+            var message = "An error occured while handling request.";
             OnError(error, message);
             await OnErrorAsync(error, message);
 
             try
             {
-                var response = JsonRpcResponse.FromError(errorCode, request?.Id, error.ToString());
-                await WriteResponseAsync(context, response);
+                await WriteResponseAsync(null, new JsonRpcError {Code = errorCode, Message = message, Data = error?.ToString()});
             }
             catch (Exception e)
             {
-                message = "An unexpected error occured while handling another error.";
+                message = "An unexpected error occured while writing response.";
                 OnError(e, message);
                 await OnErrorAsync(e, message);
             }
         }
 
-        private static async Task WriteResponseAsync(HttpListenerContext context, object result)
+        private static async Task WriteResponseAsync(object result, JsonRpcError error = null)
         {
-            var output = context.Response.OutputStream;
+            var httpContext = JsonRpcContext.Current.HttpContext;
+            var output = httpContext.Response.OutputStream;
 
             if (result is JsonRpcStreamResult streamResult)
             {
-                context.Response.ContentType = streamResult.ContentType;
+                httpContext.Response.ContentType = streamResult.ContentType;
 
                 if (streamResult.Stream.CanSeek)
                 {
-                    context.Response.ContentLength64 = streamResult.Stream.Length;
+                    httpContext.Response.ContentLength64 = streamResult.Stream.Length;
                 }
 
                 using (streamResult.Stream)
@@ -504,11 +512,11 @@ namespace HttpJsonRpc
             }
             else if (result is Stream stream)
             {
-                context.Response.ContentType = "application/octet-stream";
+                httpContext.Response.ContentType = "application/octet-stream";
 
                 if (stream.CanSeek)
                 {
-                    context.Response.ContentLength64 = stream.Length;
+                    httpContext.Response.ContentLength64 = stream.Length;
                 }
 
                 using (stream)
@@ -522,14 +530,15 @@ namespace HttpJsonRpc
                 {
                     Id = JsonRpcContext.Current?.Request?.Id,
                     JsonRpc = "2.0",
-                    Result = result
+                    Result = result,
+                    Error = error
                 };
 
-                context.Response.ContentType = "application/json";
+                httpContext.Response.ContentType = "application/json";
                 var jsonResponse = JsonConvert.SerializeObject(response, SerializerSettings);
 
                 var byteResponse = Encoding.UTF8.GetBytes(jsonResponse);
-                context.Response.ContentLength64 = byteResponse.Length;
+                httpContext.Response.ContentLength64 = byteResponse.Length;
                 await output.WriteAsync(byteResponse, 0, byteResponse.Length);
             }
 

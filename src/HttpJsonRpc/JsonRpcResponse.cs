@@ -13,36 +13,36 @@ namespace HttpJsonRpc
         [JsonProperty("result")]
         public object Result { get; set; }
         [JsonProperty("error")]
-        public JsonRpcError JsonRpcError { get; set; }
+        public JsonRpcError Error { get; set; }
 
-        public static JsonRpcResponse FromResult(object id, object result)
-        {
-            var response = Create(id);
-            response.Result = result;
+        //public static JsonRpcResponse FromResult(object id, object result)
+        //{
+        //    var response = Create(id);
+        //    response.Result = result;
 
-            return response;
-        }
+        //    return response;
+        //}
 
-        public static JsonRpcResponse FromError(int code, object id = null, object data = null)
-        {
-            var response = Create(id);
-            response.JsonRpcError = new JsonRpcError
-            {
-                Code = code,
-                Message = JsonRpcErrorCodes.GetMessage(code),
-                Data = data == null ? null : JToken.FromObject(data)
-            };
+        //public static JsonRpcResponse FromError(int code, object id = null, object data = null)
+        //{
+        //    var response = Create(id);
+        //    response.Error = new JsonRpcError
+        //    {
+        //        Code = code,
+        //        Message = JsonRpcErrorCodes.GetMessage(code),
+        //        Data = data == null ? null : JToken.FromObject(data)
+        //    };
 
-            return response;
-        }
+        //    return response;
+        //}
 
-        private static JsonRpcResponse Create(object id)
-        {
-            return new JsonRpcResponse
-            {
-                JsonRpc = "2.0",
-                Id = id
-            };
-        }
+        //private static JsonRpcResponse Create(object id)
+        //{
+        //    return new JsonRpcResponse
+        //    {
+        //        JsonRpc = "2.0",
+        //        Id = id
+        //    };
+        //}
     }
 }
