@@ -475,13 +475,16 @@ namespace HttpJsonRpc
 
         private static async Task HandleErrorAsync(int errorCode, Exception error)
         {
-            var message = "An error occured while handling request.";
+            var request = JsonRpcContext.Current.Request;
+            var jsonError = JsonRpcError.Create(errorCode, error?.ToString());
+
+            var message = $"An error occured while handling the request '{request?.Method}'. JsonRpcError: {jsonError.Message} ({jsonError.Code})";
             OnError(error, message);
             await OnErrorAsync(error, message);
 
             try
             {
-                await WriteResponseAsync(null, new JsonRpcError {Code = errorCode, Message = message, Data = error?.ToString()});
+                await WriteResponseAsync(null, jsonError);
             }
             catch (Exception e)
             {
