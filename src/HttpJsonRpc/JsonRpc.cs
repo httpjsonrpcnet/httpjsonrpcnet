@@ -256,29 +256,37 @@ namespace HttpJsonRpc
             }
 
             string jsonRequest = null;
-            if (httpContext.Request.QueryString.Count > 0)
+            try
             {
-                jsonRequest = GetRequestFromQueryString();
-            }
-            else
-            {
-                var contentType = httpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
-                if (contentType != null)
+                if (httpContext.Request.QueryString.Count > 0)
                 {
-                    switch (contentType)
+                    jsonRequest = GetRequestFromQueryString();
+                }
+                else
+                {
+                    var contentType = httpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
+                    if (contentType != null)
                     {
-                        case "application/json":
-                            jsonRequest = await GetRequestFromBodyAsync();
-                            break;
-                        case "multipart/form-data":
-                            jsonRequest = await GetRequestFromFormAsync();
-                            break;
-                        default:
-                            httpContext.Response.StatusCode = (int)HttpStatusCode.UnsupportedMediaType;
-                            httpContext.Response.OutputStream.Close();
-                            return;
+                        switch (contentType)
+                        {
+                            case "application/json":
+                                jsonRequest = await GetRequestFromBodyAsync();
+                                break;
+                            case "multipart/form-data":
+                                jsonRequest = await GetRequestFromFormAsync();
+                                break;
+                            default:
+                                httpContext.Response.StatusCode = (int)HttpStatusCode.UnsupportedMediaType;
+                                httpContext.Response.OutputStream.Close();
+                                return;
+                        }
                     }
                 }
+            }
+            catch (Exception e)
+            {
+                await HandleErrorAsync(JsonRpcErrorCodes.InternalError, e);
+                return;
             }
 
             JsonRpcRequest request = null;
