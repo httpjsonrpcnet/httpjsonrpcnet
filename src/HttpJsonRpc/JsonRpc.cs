@@ -227,7 +227,8 @@ namespace HttpJsonRpc
 
         private static async void HandleRequest()
         {
-            var httpContext = JsonRpcContext.Current.HttpContext;
+            var context = JsonRpcContext.Current;
+            var httpContext = context.HttpContext;
 
             try
             {
@@ -240,47 +241,21 @@ namespace HttpJsonRpc
                 return;
             }
 
-            if (httpContext.Response.ContentLength64 != 0) return;
-
-            if (!new[] { "GET", "POST" }.Contains(httpContext.Request.HttpMethod, StringComparer.InvariantCultureIgnoreCase))
-            {
-                httpContext.Response.StatusCode = (int)HttpStatusCode.NotFound;
-                httpContext.Response.OutputStream.Close();
-                return;
-            }
-
-            if (httpContext.Request.RawUrl.EndsWith("favicon.ico"))
-            {
-                httpContext.Response.OutputStream.Close();
-                return;
-            }
-
-            string jsonRequest = null;
             try
             {
-                if (httpContext.Request.QueryString.Count > 0)
+                if (httpContext.Response.ContentLength64 != 0) return;
+
+                if (!new[] { "GET", "POST" }.Contains(httpContext.Request.HttpMethod, StringComparer.InvariantCultureIgnoreCase))
                 {
-                    jsonRequest = GetRequestFromQueryString();
+                    httpContext.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                    httpContext.Response.OutputStream.Close();
+                    return;
                 }
-                else
+
+                if (httpContext.Request.RawUrl.EndsWith("favicon.ico"))
                 {
-                    var contentType = httpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
-                    if (contentType != null)
-                    {
-                        switch (contentType)
-                        {
-                            case "application/json":
-                                jsonRequest = await GetRequestFromBodyAsync();
-                                break;
-                            case "multipart/form-data":
-                                jsonRequest = await GetRequestFromFormAsync();
-                                break;
-                            default:
-                                httpContext.Response.StatusCode = (int)HttpStatusCode.UnsupportedMediaType;
-                                httpContext.Response.OutputStream.Close();
-                                return;
-                        }
-                    }
+                    httpContext.Response.OutputStream.Close();
+                    return;
                 }
             }
             catch (Exception e)
@@ -289,11 +264,19 @@ namespace HttpJsonRpc
                 return;
             }
 
-            JsonRpcRequest request = null;
             try
             {
-                request = JsonConvert.DeserializeObject<JsonRpcRequest>(jsonRequest, SerializerSettings);
-                if (request == null) throw new ArgumentException("Failed to parse JSON request.");
+                await SetContextRequestJsonAsync();
+            }
+            catch (Exception e)
+            {
+                await HandleErrorAsync(JsonRpcErrorCodes.InvalidRequest, e);
+                return;
+            }
+
+            try
+            {
+                SetContextRequest();
             }
             catch (Exception e)
             {
@@ -301,24 +284,15 @@ namespace HttpJsonRpc
                 return;
             }
 
-            JsonRpcContext.Current.Request = request;
-
-            //Commented out for now because it's a security vulnerability to list all methods. Will re-add feature when a better way is designed.
-            //if (string.IsNullOrEmpty(request?.Method))
-            //{
-            //    var info = new JsonRpcInfo();
-            //    info.Methods = Methods.ToList();
-            //    await WriteResponseAsync(httpContext, JsonRpcResponse.FromResult(null, info));
-            //    return;
-            //}
-
-            var method = GetMethod(request.Method);
-            if (method == null)
+            try
             {
-                await WriteResponseAsync(httpContext, JsonRpcError.Create(JsonRpcErrorCodes.MethodNotFound, request.Method));
+                SetContextMethod();
+            }
+            catch (Exception e)
+            {
+                await HandleErrorAsync(JsonRpcErrorCodes.MethodNotFound, e);
                 return;
             }
-
 
             try
             {
@@ -333,26 +307,9 @@ namespace HttpJsonRpc
 
             if (httpContext.Response.ContentLength64 != 0) return;
 
-            //Prepare the method parameters
-            var parameterValues = new List<object>();
             try
             {
-                var parameters = method.MethodInfo.GetParameters();
-                var serializer = CreateSerializer();
-
-                foreach (var parameter in parameters)
-                {
-                    var parameterAttribute = parameter.GetCustomAttribute<JsonRpcParameterAttribute>();
-                    if (parameterAttribute?.Ignore == true)
-                    {
-                        parameterValues.Add(Type.Missing);
-                        continue;
-                    }
-
-                    var parameterName = parameterAttribute?.Name ?? parameter.Name;
-                    var value = request.Params?[parameterName]?.ToObject(parameter.ParameterType, serializer) ?? Type.Missing;
-                    parameterValues.Add(value);
-                }
+                SetContextRequestParameters();
             }
             catch (Exception e)
             {
@@ -360,22 +317,9 @@ namespace HttpJsonRpc
                 return;
             }
 
-            //Execute the method
             try
             {
-                try
-                {
-                    var methodTask = (Task) method.MethodInfo.Invoke(null, parameterValues.ToArray());
-                    await methodTask;
-                    var result = methodTask.GetType().GetProperty("Result")?.GetValue(methodTask);
-                    await WriteResponseAsync(result);
-
-                    return;
-                }
-                catch (TargetInvocationException ex)
-                {
-                    ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
-                }
+                await ExecuteMethodAsync();
             }
             catch (JsonRpcUnauthorizedException e)
             {
@@ -387,6 +331,49 @@ namespace HttpJsonRpc
                 await HandleErrorAsync(JsonRpcErrorCodes.ExecutionError, e);
                 return;
             }
+
+            try
+            {
+                await WriteResponseAsync(context.Result);
+            }
+            catch (Exception e)
+            {
+                await HandleErrorAsync(JsonRpcErrorCodes.InternalError, e);
+                return;
+            }
+        }
+
+        private static async Task SetContextRequestJsonAsync()
+        {
+            var context = JsonRpcContext.Current;
+
+            string requestJson = null;
+            if (context.HttpContext.Request.QueryString.Count > 0)
+            {
+                requestJson = GetRequestFromQueryString();
+            }
+            else
+            {
+                var contentType = context.HttpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
+                if (contentType != null)
+                {
+                    switch (contentType)
+                    {
+                        case "application/json":
+                            requestJson = await GetRequestFromBodyAsync();
+                            break;
+                        case "multipart/form-data":
+                            requestJson = await GetRequestFromFormAsync();
+                            break;
+                        default:
+                            throw new Exception($"{contentType} is not a supported content-type.");
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(requestJson)) throw new Exception($"Request is empty.");
+
+            context.RequestJson = requestJson;
         }
 
         private static async Task<string> GetRequestFromBodyAsync()
@@ -425,21 +412,25 @@ namespace HttpJsonRpc
                 parameters[key] = value;
             }
 
-            var method = GetMethod(jRequest["method"].ToString());
-
             //Move unknown values into ExtensionData
-            if (method != null)
+            var methodName = jRequest["method"]?.ToString()?.ToLowerInvariant();
+            if (!string.IsNullOrWhiteSpace(methodName) && Methods.Contains(methodName))
             {
-                var extensionData = new Dictionary<string, string>();
-                foreach (var parameter in parameters)
+                var method = Methods[methodName];
+                
+                if (method != null)
                 {
-                    if (!method.Parameters.Contains(parameter.Key)) extensionData[parameter.Key] = parameter.Value.ToString();
-                }
+                    var extensionData = new Dictionary<string, string>();
+                    foreach (var parameter in parameters)
+                    {
+                        if (!method.Parameters.Contains(parameter.Key)) extensionData[parameter.Key] = parameter.Value.ToString();
+                    }
 
-                foreach (var kvp in extensionData)
-                {
-                    parameters.Remove(kvp.Key);
-                    jRequest[kvp.Key] = kvp.Value;
+                    foreach (var kvp in extensionData)
+                    {
+                        parameters.Remove(kvp.Key);
+                        jRequest[kvp.Key] = kvp.Value;
+                    }
                 }
             }
 
@@ -469,22 +460,73 @@ namespace HttpJsonRpc
             return jsonRequest;
         }
 
-        private static JsonRpcMethod GetMethod(string name)
+        private static void SetContextRequest()
         {
-            if (name == null) return null;
+            var context = JsonRpcContext.Current;
+
+            context.Request = JsonConvert.DeserializeObject<JsonRpcRequest>(context.RequestJson, SerializerSettings);
+            if (context.Request == null) throw new ArgumentException("Failed to parse JSON request.");
+        }
+
+        private static void SetContextMethod()
+        {
+            var context = JsonRpcContext.Current;
+            var name = context.Request.Method;
+
+            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("method is empty");
 
             name = name.ToLowerInvariant();
-            if (!Methods.Contains(name)) return null;
+            if (!Methods.Contains(name)) throw new ArgumentException($"method {name} does not exist.");
 
-            var method = Methods[name];
+            context.Method = Methods[name];
+        }
 
-            return method;
+        private static async Task ExecuteMethodAsync()
+        {
+            var context = JsonRpcContext.Current;
+
+            try
+            {
+                var methodTask = (Task)context.Method.MethodInfo.Invoke(null, context.RequestParameters.ToArray());
+                await methodTask;
+                context.Result = methodTask.GetType().GetProperty("Result")?.GetValue(methodTask);
+            }
+            catch (TargetInvocationException ex)
+            {
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            }
+        }
+
+        private static void SetContextRequestParameters()
+        {
+            var context = JsonRpcContext.Current;
+
+            var parameterInfos = context.Method.MethodInfo.GetParameters();
+            var requestParameters = new List<object>();
+            var serializer = CreateSerializer();
+
+            foreach (var parameter in parameterInfos)
+            {
+                var parameterAttribute = parameter.GetCustomAttribute<JsonRpcParameterAttribute>();
+                if (parameterAttribute?.Ignore == true)
+                {
+                    requestParameters.Add(Type.Missing);
+                    continue;
+                }
+
+                var parameterName = parameterAttribute?.Name ?? parameter.Name;
+                var value = context.Request.Params?[parameterName]?.ToObject(parameter.ParameterType, serializer) ?? Type.Missing;
+
+                requestParameters.Add(value);
+            }
+
+            context.RequestParameters = requestParameters;
         }
 
         private static async Task HandleErrorAsync(int errorCode, Exception error)
         {
             var request = JsonRpcContext.Current.Request;
-            var jsonError = JsonRpcError.Create(errorCode, error?.ToString());
+            var jsonError = JsonRpcError.Create(errorCode, error);
 
             var message = $"An error occured while handling the request '{request?.Method}'. JsonRpcError: {jsonError.Message} ({jsonError.Code})";
             OnError(error, message);
@@ -496,7 +538,7 @@ namespace HttpJsonRpc
             }
             catch (Exception e)
             {
-                message = "An unexpected error occured while writing response.";
+                message = "An unexpected error occured while writing an error response.";
                 OnError(e, message);
                 await OnErrorAsync(e, message);
             }
