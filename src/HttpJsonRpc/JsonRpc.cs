@@ -184,7 +184,7 @@ namespace HttpJsonRpc
             }
         }
 
-        public static async void Start(params string[] addresses)
+        public static void Start(params string[] addresses)
         {
             if (Methods.Count == 0)
             {
@@ -207,20 +207,15 @@ namespace HttpJsonRpc
                 Listener.Prefixes.Add(address.EndsWith("/") ? address : $"{address}/");
             }
 
-            try
-            {
-                Listener.Start();
-            }
-            catch (Exception e)
-            {
-                var message = $"An error occured while starting {typeof(HttpListener)}";
-                OnError(e, message);
-                await OnErrorAsync(e, message);
-                return;
-            }
+            Listener.Start();
 
             CreateLogger()?.LogInformation($"Listening for JSON-RPC requests on {string.Join(", ", addresses)}");
 
+            HandleRequests();
+        }
+
+        private static async void HandleRequests()
+        {
             while (Listener.IsListening)
             {
                 try
