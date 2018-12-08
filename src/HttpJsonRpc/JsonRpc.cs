@@ -207,7 +207,17 @@ namespace HttpJsonRpc
                 Listener.Prefixes.Add(address.EndsWith("/") ? address : $"{address}/");
             }
 
-            Listener.Start();
+            try
+            {
+                Listener.Start();
+            }
+            catch (Exception e)
+            {
+                var message = $"An error occured while starting {typeof(HttpListener)}";
+                OnError(e, message);
+                await OnErrorAsync(e, message);
+                return;
+            }
 
             CreateLogger()?.LogInformation($"Listening for JSON-RPC requests on {string.Join(", ", addresses)}");
 
