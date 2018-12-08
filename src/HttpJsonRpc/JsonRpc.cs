@@ -184,7 +184,7 @@ namespace HttpJsonRpc
             }
         }
 
-        public static async void Start(string address = null)
+        public static async void Start(params string[] addresses)
         {
             if (Methods.Count == 0)
             {
@@ -199,14 +199,17 @@ namespace HttpJsonRpc
                 }
             }
 
-            if (address == null) address = "http://127.0.0.1:5000/";
-            if (!address.EndsWith("/")) address += "/";
+            if (addresses.Length == 0) addresses = new []{"http://127.0.0.1:5000/"};
 
             Listener = new HttpListener();
-            Listener.Prefixes.Add(address);
+            foreach (var address in addresses)
+            {
+                Listener.Prefixes.Add(address.EndsWith("/") ? address : $"{address}/");
+            }
+
             Listener.Start();
 
-            CreateLogger()?.LogInformation($"Listening for JSON-RPC requests on {address}");
+            CreateLogger()?.LogInformation($"Listening for JSON-RPC requests on {string.Join(", ", addresses)}");
 
             while (Listener.IsListening)
             {

@@ -24,7 +24,7 @@ namespace HttpJsonRpc.Sample
                 Debug.WriteLine(e.ToString());
             });
 
-            JsonRpc.Start();
+            JsonRpc.Start("http://127.0.0.1:5000/", "http://127.0.0.1:5001/", "http://127.0.0.1:5002/", "http://127.0.0.1:5003/");
             Console.ReadLine();
             JsonRpc.Stop();
         }
