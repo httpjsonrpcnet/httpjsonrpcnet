@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading.Tasks;
+using CommonServiceLocator;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -145,9 +146,10 @@ namespace HttpJsonRpc
             foreach (var t in fromAssembly.DefinedTypes)
             {
                 var classAttribute = t.GetCustomAttribute<JsonRpcClassAttribute>();
-                var className = classAttribute?.Name ?? t.Name;
+                if (classAttribute == null) continue;
 
-                foreach (var m in t.DeclaredMethods)
+                var className = classAttribute.Name ?? t.Name;
+                foreach (var m in t.GetMethods())
                 {
                     var methodAttribute = m.GetCustomAttribute<JsonRpcMethodAttribute>();
                     if (methodAttribute == null) continue;
@@ -492,10 +494,17 @@ namespace HttpJsonRpc
         private static async Task ExecuteMethodAsync()
         {
             var context = JsonRpcContext.Current;
+            var methodInfo = context.Method.MethodInfo;
+            object classInstance = null;
+
+            if (!methodInfo.IsStatic)
+            {
+                classInstance = ServiceLocator.IsLocationProviderSet ? ServiceLocator.Current.GetInstance(methodInfo.ReflectedType) : Activator.CreateInstance(methodInfo.ReflectedType);
+            }
 
             try
             {
-                var methodTask = (Task)context.Method.MethodInfo.Invoke(null, context.RequestParameters.ToArray());
+                var methodTask = (Task)context.Method.MethodInfo.Invoke(classInstance, context.RequestParameters.ToArray());
                 await methodTask;
                 context.Result = methodTask.GetType().GetProperty("Result")?.GetValue(methodTask);
             }

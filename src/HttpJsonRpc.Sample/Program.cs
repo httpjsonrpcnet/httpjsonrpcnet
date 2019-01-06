@@ -2,6 +2,9 @@
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
+using Autofac;
+using Autofac.Extras.CommonServiceLocator;
+using CommonServiceLocator;
 using Microsoft.Extensions.Logging;
 using Serilog;
 
@@ -24,6 +27,14 @@ namespace HttpJsonRpc.Sample
                 Debug.WriteLine(e.ToString());
             });
 
+            //Setup optional dependency injection
+            var builder = new ContainerBuilder();
+            builder.RegisterType<MathApi>();
+            builder.RegisterType<MathService>().As<IMathService>();
+            var container = builder.Build();
+            var csl = new AutofacServiceLocator(container);
+            ServiceLocator.SetLocatorProvider(() => csl);
+
             try
             {
                 JsonRpc.Start("http://127.0.0.1:5000/", "http://127.0.0.1:5001/", "http://127.0.0.1:5002/", "http://127.0.0.1:5003/");
@@ -35,14 +46,6 @@ namespace HttpJsonRpc.Sample
             
             Console.ReadLine();
             JsonRpc.Stop();
-        }
-
-        [JsonRpcMethod(Description = "Provides the sum of two numbers.")]
-        public static Task<int> SumAsync(int num1 = 0, int num2 = 0, [JsonRpcParameter(Name = "x")] int multiplier = 1, [JsonRpcParameter(Ignore = true)] bool log = false, bool throwException = false)
-        {
-            if (throwException) JsonRpcUnauthorizedException.Throw();
-            var value = (num1 + num2) * multiplier;
-            return Task.FromResult(value);
         }
 
         [JsonRpcMethod]
