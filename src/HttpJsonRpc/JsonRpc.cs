@@ -26,7 +26,8 @@ namespace HttpJsonRpc
             Formatting = Formatting.Indented
         };
 
-        private static HttpListener Listener { get; set; }
+        private static HttpListener Listener { get; } = new HttpListener();
+        public static ICollection<string> Addresses => Listener.Prefixes;
         private static JsonRpcMethodCollection Methods { get; } = new JsonRpcMethodCollection();
 
         private static List<Func<HttpListenerContext, Task>> OnReceivedHttpRequestAsyncMethods { get; } = new List<Func<HttpListenerContext, Task>>();
@@ -201,17 +202,16 @@ namespace HttpJsonRpc
                 }
             }
 
-            if (addresses.Length == 0) addresses = new []{"http://127.0.0.1:5000/"};
-
-            Listener = new HttpListener();
             foreach (var address in addresses)
             {
-                Listener.Prefixes.Add(address.EndsWith("/") ? address : $"{address}/");
+                Addresses.Add(address.EndsWith("/") ? address : $"{address}/");
             }
+
+            if (Addresses.Count == 0) Addresses.Add("http://127.0.0.1:5000/");
 
             Listener.Start();
 
-            CreateLogger()?.LogInformation($"Listening for JSON-RPC requests on {string.Join(", ", addresses)}");
+            CreateLogger()?.LogInformation($"Listening for JSON-RPC requests on {string.Join(", ", Addresses)}");
 
             HandleRequests();
         }
