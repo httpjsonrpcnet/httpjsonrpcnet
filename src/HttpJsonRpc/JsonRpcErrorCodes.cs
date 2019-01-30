@@ -10,8 +10,6 @@
 
         //Custom codes
         public const int Unauthorized = 1;
-        public const int ActionNotAllowed = 2;
-        public const int ExecutionError = 3;
 
         public static string GetMessage(int code)
         {

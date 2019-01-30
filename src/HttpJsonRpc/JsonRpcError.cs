@@ -10,27 +10,27 @@ namespace HttpJsonRpc
 
         public static JsonRpcError Create(int code, Exception ex = null)
         {
-            JsonRpcExceptionData data = null;
-            if (ex != null)
+            var e = new JsonRpcError
             {
-                data = new JsonRpcExceptionData
+                Code = code
+            };
+
+            if (ex == null)
+            {
+                e.Message = JsonRpcErrorCodes.GetMessage(code);
+            }
+            else
+            {
+                e.Message = ex.Message;
+
+                e.Data = new JsonRpcExceptionData
                 {
                     Message = ex.Message,
                     StackTrace = ex.StackTrace
                 };
             }
 
-            return Create(code, data);
-        }
-
-        public static JsonRpcError Create(int code, object data = null)
-        {
-            return new JsonRpcError
-            {
-                Code = code,
-                Message = JsonRpcErrorCodes.GetMessage(code),
-                Data = data
-            };
+            return e;
         }
     }
 }

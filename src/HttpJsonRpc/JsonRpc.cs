@@ -338,7 +338,7 @@ namespace HttpJsonRpc
             }
             catch (Exception e)
             {
-                await HandleErrorAsync(JsonRpcErrorCodes.ExecutionError, e);
+                await HandleErrorAsync(JsonRpcErrorCodes.InternalError, e);
                 return;
             }
 

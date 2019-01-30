@@ -10,6 +10,7 @@ using Serilog;
 
 namespace HttpJsonRpc.Sample
 {
+    [JsonRpcClass("program")]
     class Program
     {
         static void Main(string[] args)
@@ -74,6 +75,12 @@ namespace HttpJsonRpc.Sample
             var result = new JsonRpcStreamResult(file, "image/jpeg");
 
             return Task.FromResult(result);
+        }
+
+        [JsonRpcMethod]
+        public static Task ThrowErrorAsync(string message)
+        {            
+            throw new Exception(message);
         }
     }
 }
