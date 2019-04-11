@@ -427,7 +427,7 @@ namespace HttpJsonRpc
             if (!string.IsNullOrWhiteSpace(methodName) && Methods.Contains(methodName))
             {
                 var method = Methods[methodName];
-                
+
                 if (method != null)
                 {
                     var extensionData = new Dictionary<string, string>();
@@ -522,8 +522,9 @@ namespace HttpJsonRpc
             var requestParameters = new List<object>();
             var serializer = CreateSerializer();
 
-            foreach (var parameter in parameterInfos)
+            for (int i = 0; i < parameterInfos.Length; i++)
             {
+                var parameter = parameterInfos[i];
                 var parameterAttribute = parameter.GetCustomAttribute<JsonRpcParameterAttribute>();
                 if (parameterAttribute?.Ignore == true)
                 {
@@ -532,9 +533,15 @@ namespace HttpJsonRpc
                 }
 
                 var parameterName = parameterAttribute?.Name ?? parameter.Name;
-                var value = context.Request.Params?[parameterName]?.ToObject(parameter.ParameterType, serializer) ?? Type.Missing;
 
-                requestParameters.Add(value);
+                if (context.Request.Params.Type == JTokenType.Array)
+                {
+                    requestParameters.Add(context.Request.Params?[i]?.ToObject(parameter.ParameterType, serializer) ?? Type.Missing);
+                }
+                else
+                {
+                    requestParameters.Add(context.Request.Params?[parameterName]?.ToObject(parameter.ParameterType, serializer) ?? Type.Missing);
+                }
             }
 
             context.RequestParameters = requestParameters;
