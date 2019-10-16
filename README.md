@@ -1,4 +1,5 @@
-# HttpJsonRpc Documentation
+# HttpJsonRpc
+HttpJsonRpc is a cross-platform, .NET Standard library that implements the [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification). It makes it simple to create high performance, robust, light-weight API's that can be hosted in any project type. It has no dependency on ASP.NET.
 
 ## Getting Started
 1. Create a class that will hold your `JsonRpc` methods with the `JsonRpcClassAttribute`.
