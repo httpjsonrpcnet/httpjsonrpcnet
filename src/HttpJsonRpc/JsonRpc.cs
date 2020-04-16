@@ -163,8 +163,6 @@ namespace HttpJsonRpc
                         name = name.Remove(asyncIndex);
                     }
 
-                    name = name.ToLowerInvariant();
-
                     var method = new JsonRpcMethod();
                     method.Name = name;
                     method.Description = methodAttribute.Description;
@@ -181,15 +179,15 @@ namespace HttpJsonRpc
                         parameter.Description = parameterAttribute?.Description;
                         parameter.Type = JsonTypeMap.GetJsonType(parameterInfo.ParameterType);
                         parameter.Optional = parameterInfo.IsOptional;
-                        method.Parameters.Add(parameter.Name.ToLower(), parameter);
+                        method.Parameters.Add(parameter.Name.ToLowerInvariant(), parameter);
                     }
 
-                    rpcClass.Methods.Add(method.Name.ToLower(), method);
+                    rpcClass.Methods.Add(method.Name.ToLowerInvariant(), method);
                 }
 
                 rpcClass.ReceivedRequestMethod = t.DeclaredMethods.FirstOrDefault(m => Attribute.IsDefined(m, typeof(JsonRpcReceivedRequestAttribute)));
 
-                RpcClasses.Add(rpcClass.Name, rpcClass);
+                RpcClasses.Add(rpcClass.Name.ToLowerInvariant(), rpcClass);
             }
         }
 
@@ -649,8 +647,8 @@ namespace HttpJsonRpc
             var parts = fullMethodName.Split('.');
             if (parts.Length != 2) return null;
 
-            var className = parts[0].ToLower();
-            var methodName = parts[1].ToLower();
+            var className = parts[0].ToLowerInvariant();
+            var methodName = parts[1].ToLowerInvariant();
             
             if (RpcClasses.TryGetValue(className, out var rpcClass) && rpcClass.Methods.TryGetValue(methodName, out var rpcMethod)) return rpcMethod;
 
