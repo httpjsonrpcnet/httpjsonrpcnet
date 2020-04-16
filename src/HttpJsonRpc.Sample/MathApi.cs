@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Threading.Tasks;
 
 namespace HttpJsonRpc.Sample
 {
@@ -13,10 +14,18 @@ namespace HttpJsonRpc.Sample
         }
 
         [JsonRpcMethod(Description = "Provides the sum of two numbers.")]
-        public Task<int> SumAsync(int n1, int n2)
+        public Task<int> SumAsync(int n1 = 0, int n2 = 0)
         {
             var value = MathService.Sum(n1, n2);
             return Task.FromResult(value);
+        }
+
+        [JsonRpcReceivedRequest]
+        public async Task OnReceivedRequestAsync(JsonRpcContext context)
+        {
+            await Task.CompletedTask;
+
+            Console.WriteLine("OnReceivedRequest in JsonRpcClass");
         }
     }
 }

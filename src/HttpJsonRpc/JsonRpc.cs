@@ -28,7 +28,7 @@ namespace HttpJsonRpc
 
         private static HttpListener Listener { get; } = new HttpListener();
         public static ICollection<string> Addresses => Listener.Prefixes;
-        private static JsonRpcMethodCollection Methods { get; } = new JsonRpcMethodCollection();
+        private static Dictionary<string, JsonRpcClass> RpcClasses { get; } = new Dictionary<string, JsonRpcClass>();
 
         private static List<Func<HttpListenerContext, Task>> OnReceivedHttpRequestAsyncMethods { get; } = new List<Func<HttpListenerContext, Task>>();
         private static List<Func<JsonRpcContext, Task>> OnReceivedRequestAsyncMethods { get; } = new List<Func<JsonRpcContext, Task>>();
@@ -42,6 +42,11 @@ namespace HttpJsonRpc
         {
         }
 
+        public static void OnReceivedHttpRequest(Action<HttpListenerContext> method)
+        {
+            OnReceivedHttpRequestMethods.Add(method);
+        }
+
         public static void OnReceivedHttpRequest(Func<HttpListenerContext, Task> method)
         {
             OnReceivedHttpRequestAsyncMethods.Add(method);
@@ -49,35 +54,14 @@ namespace HttpJsonRpc
 
         private static async Task OnReceivedHttpRequestAsync(HttpListenerContext context)
         {
-            foreach (var method in OnReceivedHttpRequestAsyncMethods)
-            {
-                await method(context);
-            }
-        }
-
-        public static void OnReceivedRequest(Func<JsonRpcContext, Task> method)
-        {
-            OnReceivedRequestAsyncMethods.Add(method);
-        }
-
-        private static async Task OnReceivedRequestAsync()
-        {
-            foreach (var method in OnReceivedRequestAsyncMethods)
-            {
-                await method(JsonRpcContext.Current);
-            }
-        }
-
-        public static void OnReceivedHttpRequest(Action<HttpListenerContext> method)
-        {
-            OnReceivedHttpRequestMethods.Add(method);
-        }
-
-        private static void OnReceivedHttpRequest(HttpListenerContext context)
-        {
             foreach (var method in OnReceivedHttpRequestMethods)
             {
                 method(context);
+            }
+
+            foreach (var method in OnReceivedHttpRequestAsyncMethods)
+            {
+                await method(context);
             }
         }
 
@@ -86,11 +70,27 @@ namespace HttpJsonRpc
             OnReceivedRequestMethods.Add(method);
         }
 
-        private static void OnReceivedRequest()
+        public static void OnReceivedRequest(Func<JsonRpcContext, Task> method)
         {
+            OnReceivedRequestAsyncMethods.Add(method);
+        }
+
+        private static async Task OnReceivedRequestAsync(JsonRpcContext context)
+        {
+            if (context.Method.ParentClass.ReceivedRequestMethod != null)
+            {
+                var methodTask = (Task) context.Method.ParentClass.ReceivedRequestMethod.Invoke(context.ClassInstance, new object[] {context});
+                if (methodTask != null) await methodTask;
+            }
+
             foreach (var method in OnReceivedRequestMethods)
             {
-                method(JsonRpcContext.Current);
+                method(context);
+            }
+
+            foreach (var method in OnReceivedRequestAsyncMethods)
+            {
+                await method(context);
             }
         }
 
@@ -149,13 +149,14 @@ namespace HttpJsonRpc
                 var classAttribute = t.GetCustomAttribute<JsonRpcClassAttribute>();
                 if (classAttribute == null) continue;
 
-                var className = classAttribute.Name ?? t.Name;
-                foreach (var m in t.GetMethods())
+                var rpcClass = new JsonRpcClass();
+                rpcClass.Name = classAttribute.Name ?? t.Name;
+                foreach (var m in t.DeclaredMethods)
                 {
                     var methodAttribute = m.GetCustomAttribute<JsonRpcMethodAttribute>();
                     if (methodAttribute == null) continue;
 
-                    var name = methodAttribute.Name ?? $"{className}.{m.Name}";
+                    var name = methodAttribute.Name ?? m.Name;
                     var asyncIndex = name.LastIndexOf("Async", StringComparison.Ordinal);
                     if (asyncIndex > -1)
                     {
@@ -168,6 +169,7 @@ namespace HttpJsonRpc
                     method.Name = name;
                     method.Description = methodAttribute.Description;
                     method.MethodInfo = m;
+                    method.ParentClass = rpcClass;
 
                     foreach (var parameterInfo in m.GetParameters())
                     {
@@ -179,17 +181,21 @@ namespace HttpJsonRpc
                         parameter.Description = parameterAttribute?.Description;
                         parameter.Type = JsonTypeMap.GetJsonType(parameterInfo.ParameterType);
                         parameter.Optional = parameterInfo.IsOptional;
-                        method.Parameters.Add(parameter);
+                        method.Parameters.Add(parameter.Name.ToLower(), parameter);
                     }
 
-                    Methods.Add(method);
+                    rpcClass.Methods.Add(method.Name.ToLower(), method);
                 }
+
+                rpcClass.ReceivedRequestMethod = t.DeclaredMethods.FirstOrDefault(m => Attribute.IsDefined(m, typeof(JsonRpcReceivedRequestAttribute)));
+
+                RpcClasses.Add(rpcClass.Name, rpcClass);
             }
         }
 
         public static void Start(params string[] addresses)
         {
-            if (Methods.Count == 0)
+            if (RpcClasses.Count == 0)
             {
                 var excludeProducts = new List<string> {"Microsoft® .NET Framework", "Json.NET", "HttpJsonRpc"};
 
@@ -213,18 +219,17 @@ namespace HttpJsonRpc
 
             CreateLogger()?.LogInformation($"Listening for JSON-RPC requests on {string.Join(", ", Addresses)}");
 
-            HandleRequests();
+            ListenForRequests();
         }
 
-        private static async void HandleRequests()
+        private static async void ListenForRequests()
         {
             while (Listener.IsListening)
             {
                 try
                 {
                     var httpContext = await Listener.GetContextAsync();
-                    JsonRpcContext.Current = new JsonRpcContext { HttpContext = httpContext };
-                    HandleRequest();
+                    HandleRequest(httpContext);
                 }
                 catch (Exception e)
                 {
@@ -235,14 +240,13 @@ namespace HttpJsonRpc
             }
         }
 
-        private static async void HandleRequest()
+        private static async void HandleRequest(HttpListenerContext httpContext)
         {
-            var context = JsonRpcContext.Current;
-            var httpContext = context.HttpContext;
+            var context = new JsonRpcContext { HttpContext = httpContext, SerializerSettings = SerializerSettings};
+            JsonRpcContext.Current = context;
 
             try
             {
-                OnReceivedHttpRequest(httpContext);
                 await OnReceivedHttpRequestAsync(httpContext);
             }
             catch (Exception e)
@@ -276,7 +280,7 @@ namespace HttpJsonRpc
 
             try
             {
-                await SetContextRequestJsonAsync();
+                await SetContextRequestJsonAsync(context);
             }
             catch (Exception e)
             {
@@ -286,7 +290,7 @@ namespace HttpJsonRpc
 
             try
             {
-                SetContextRequest();
+                SetContextRequest(context);
             }
             catch (Exception e)
             {
@@ -296,7 +300,7 @@ namespace HttpJsonRpc
 
             try
             {
-                SetContextMethod();
+                SetContextMethod(context);
             }
             catch (Exception e)
             {
@@ -306,8 +310,17 @@ namespace HttpJsonRpc
 
             try
             {
-                OnReceivedRequest();
-                await OnReceivedRequestAsync();
+                SetContextClassInstance(context);
+            }
+            catch (Exception e)
+            {
+                await HandleErrorAsync(JsonRpcErrorCodes.InternalError, e);
+                return;
+            }
+
+            try
+            {
+                await OnReceivedRequestAsync(context);
             }
             catch (Exception e)
             {
@@ -319,7 +332,7 @@ namespace HttpJsonRpc
 
             try
             {
-                SetContextRequestParameters();
+                SetContextRequestParameters(context);
             }
             catch (Exception e)
             {
@@ -329,7 +342,7 @@ namespace HttpJsonRpc
 
             try
             {
-                await ExecuteMethodAsync();
+                await ExecuteMethodAsync(context);
             }
             catch (JsonRpcUnauthorizedException e)
             {
@@ -353,10 +366,8 @@ namespace HttpJsonRpc
             }
         }
 
-        private static async Task SetContextRequestJsonAsync()
+        private static async Task SetContextRequestJsonAsync(JsonRpcContext context)
         {
-            var context = JsonRpcContext.Current;
-
             string requestJson = null;
             if (context.HttpContext.Request.QueryString.Count > 0)
             {
@@ -423,24 +434,20 @@ namespace HttpJsonRpc
             }
 
             //Move unknown values into ExtensionData
-            var methodName = jRequest["method"]?.ToString()?.ToLowerInvariant();
-            if (!string.IsNullOrWhiteSpace(methodName) && Methods.Contains(methodName))
+            var rpcMethod = GetMethod(jRequest["method"]?.ToString());
+
+            if (rpcMethod != null)
             {
-                var method = Methods[methodName];
-
-                if (method != null)
+                var extensionData = new Dictionary<string, string>();
+                foreach (var parameter in parameters)
                 {
-                    var extensionData = new Dictionary<string, string>();
-                    foreach (var parameter in parameters)
-                    {
-                        if (!method.Parameters.Contains(parameter.Key)) extensionData[parameter.Key] = parameter.Value.ToString();
-                    }
+                    if (!rpcMethod.Parameters.ContainsKey(parameter.Key)) extensionData[parameter.Key] = parameter.Value.ToString();
+                }
 
-                    foreach (var kvp in extensionData)
-                    {
-                        parameters.Remove(kvp.Key);
-                        jRequest[kvp.Key] = kvp.Value;
-                    }
+                foreach (var kvp in extensionData)
+                {
+                    parameters.Remove(kvp.Key);
+                    jRequest[kvp.Key] = kvp.Value;
                 }
             }
 
@@ -470,54 +477,33 @@ namespace HttpJsonRpc
             return jsonRequest;
         }
 
-        private static void SetContextRequest()
+        private static void SetContextRequest(JsonRpcContext context)
         {
-            var context = JsonRpcContext.Current;
-
-            context.Request = JsonConvert.DeserializeObject<JsonRpcRequest>(context.RequestJson, SerializerSettings);
-            if (context.Request == null) throw new ArgumentException("Failed to parse JSON request.");
+            context.Request = JsonConvert.DeserializeObject<JsonRpcRequest>(context.RequestJson, context.SerializerSettings);
+            if (context.Request == null) throw new ArgumentException("Failed to parse JSON request");
         }
 
-        private static void SetContextMethod()
+        private static void SetContextMethod(JsonRpcContext context)
         {
-            var context = JsonRpcContext.Current;
-            var name = context.Request.Method;
+            var rpcMethod = GetMethod(context.Request.Method);
 
-            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("method is empty");
+            if (rpcMethod == null) throw new ArgumentException($"Invalid method '{context.Request.Method}'");
 
-            name = name.ToLowerInvariant();
-            if (!Methods.Contains(name)) throw new ArgumentException($"method {name} does not exist.");
-
-            context.Method = Methods[name];
+            context.Method = rpcMethod;
         }
 
-        private static async Task ExecuteMethodAsync()
+        private static void SetContextClassInstance(JsonRpcContext context)
         {
-            var context = JsonRpcContext.Current;
             var methodInfo = context.Method.MethodInfo;
-            object classInstance = null;
-
+            
             if (!methodInfo.IsStatic)
             {
-                classInstance = ServiceLocator.IsLocationProviderSet ? ServiceLocator.Current.GetInstance(methodInfo.ReflectedType) : Activator.CreateInstance(methodInfo.ReflectedType);
-            }
-
-            try
-            {
-                var methodTask = (Task)context.Method.MethodInfo.Invoke(classInstance, context.RequestParameters.ToArray());
-                await methodTask;
-                context.Result = methodTask.GetType().GetProperty("Result")?.GetValue(methodTask);
-            }
-            catch (TargetInvocationException ex)
-            {
-                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                context.ClassInstance = ServiceLocator.IsLocationProviderSet ? ServiceLocator.Current.GetInstance(methodInfo.ReflectedType) : Activator.CreateInstance(methodInfo.ReflectedType);
             }
         }
 
-        private static void SetContextRequestParameters()
+        private static void SetContextRequestParameters(JsonRpcContext context)
         {
-            var context = JsonRpcContext.Current;
-
             var parameterInfos = context.Method.MethodInfo.GetParameters();
             var requestParameters = new List<object>();
             var serializer = CreateSerializer();
@@ -533,18 +519,36 @@ namespace HttpJsonRpc
                 }
 
                 var parameterName = parameterAttribute?.Name ?? parameter.Name;
+                object value = Type.Missing;
 
-                if (context.Request.Params.Type == JTokenType.Array)
+                var requestParams = context.Request.Params;
+                if (requestParams != null)
                 {
-                    requestParameters.Add(context.Request.Params?[i]?.ToObject(parameter.ParameterType, serializer) ?? Type.Missing);
+                    var valueToken = requestParams.Type == JTokenType.Array ? requestParams[i] : requestParams[parameterName];
+                    if (valueToken != null)
+                    {
+                        value = valueToken.ToObject(parameter.ParameterType, serializer);
+                    }
                 }
-                else
-                {
-                    requestParameters.Add(context.Request.Params?[parameterName]?.ToObject(parameter.ParameterType, serializer) ?? Type.Missing);
-                }
+
+                requestParameters.Add(value);
             }
 
             context.RequestParameters = requestParameters;
+        }
+
+        private static async Task ExecuteMethodAsync(JsonRpcContext context)
+        {
+            try
+            {
+                var methodTask = (Task)context.Method.MethodInfo.Invoke(context.ClassInstance, context.RequestParameters.ToArray());
+                await methodTask;
+                context.Result = methodTask.GetType().GetProperty("Result")?.GetValue(methodTask);
+            }
+            catch (TargetInvocationException ex)
+            {
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            }
         }
 
         private static async Task HandleErrorAsync(int errorCode, Exception error)
@@ -629,12 +633,28 @@ namespace HttpJsonRpc
 
         private static JsonSerializer CreateSerializer()
         {
-            return JsonSerializer.Create(SerializerSettings);
+            var settings = JsonRpcContext.Current?.SerializerSettings ?? SerializerSettings;
+            return JsonSerializer.Create(settings);
         }
 
         private static ILogger<JsonRpc> CreateLogger()
         {
             return LoggerFactory?.CreateLogger<JsonRpc>();
+        }
+
+        private static JsonRpcMethod GetMethod(string fullMethodName)
+        {
+            if (string.IsNullOrWhiteSpace(fullMethodName)) return null;
+
+            var parts = fullMethodName.Split('.');
+            if (parts.Length != 2) return null;
+
+            var className = parts[0].ToLower();
+            var methodName = parts[1].ToLower();
+            
+            if (RpcClasses.TryGetValue(className, out var rpcClass) && rpcClass.Methods.TryGetValue(methodName, out var rpcMethod)) return rpcMethod;
+
+            return null;
         }
     }
 }
