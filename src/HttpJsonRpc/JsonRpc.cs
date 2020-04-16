@@ -151,7 +151,9 @@ namespace HttpJsonRpc
 
                 var rpcClass = new JsonRpcClass();
                 rpcClass.Name = classAttribute.Name ?? t.Name;
-                foreach (var m in t.DeclaredMethods)
+
+                var classMethods = t.GetMethods();
+                foreach (var m in classMethods)
                 {
                     var methodAttribute = m.GetCustomAttribute<JsonRpcMethodAttribute>();
                     if (methodAttribute == null) continue;
@@ -185,7 +187,7 @@ namespace HttpJsonRpc
                     rpcClass.Methods.Add(method.Name.ToLowerInvariant(), method);
                 }
 
-                rpcClass.ReceivedRequestMethod = t.DeclaredMethods.FirstOrDefault(m => Attribute.IsDefined(m, typeof(JsonRpcReceivedRequestAttribute)));
+                rpcClass.ReceivedRequestMethod = classMethods.FirstOrDefault(m => Attribute.IsDefined(m, typeof(JsonRpcReceivedRequestAttribute)));
 
                 RpcClasses.Add(rpcClass.Name.ToLowerInvariant(), rpcClass);
             }
