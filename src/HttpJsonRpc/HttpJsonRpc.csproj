@@ -10,7 +10,7 @@
     <RepositoryUrl>https://github.com/httpjsonrpcnet/httpjsonrpcnet</RepositoryUrl>
     <PackageLicenseUrl></PackageLicenseUrl>
     <Description>JSON-RPC implementation over HTTP.</Description>
-    <PackageTags>http json rpc json-rpc</PackageTags>
+    <PackageTags>http json rpc json-rpc api</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
