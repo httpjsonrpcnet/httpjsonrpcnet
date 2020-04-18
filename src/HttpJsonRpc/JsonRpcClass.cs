@@ -11,5 +11,6 @@ namespace HttpJsonRpc
         public Dictionary<string, JsonRpcMethod> Methods { get; } = new Dictionary<string, JsonRpcMethod>();
 
         public MethodInfo ReceivedRequestMethod { get; set; }
+        public MethodInfo DeserializeParameterMethod { get; set; }
     }
 }

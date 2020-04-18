@@ -188,6 +188,7 @@ namespace HttpJsonRpc
                 }
 
                 rpcClass.ReceivedRequestMethod = classMethods.FirstOrDefault(m => Attribute.IsDefined(m, typeof(JsonRpcReceivedRequestAttribute)));
+                rpcClass.DeserializeParameterMethod = classMethods.FirstOrDefault(m => Attribute.IsDefined(m, typeof(JsonRpcDeserializeParameterAttribute)));
 
                 RpcClasses.Add(rpcClass.Name.ToLowerInvariant(), rpcClass);
             }
@@ -332,7 +333,7 @@ namespace HttpJsonRpc
 
             try
             {
-                SetContextRequestParameters(context);
+                await SetContextRequestParametersAsync(context);
             }
             catch (Exception e)
             {
@@ -502,9 +503,10 @@ namespace HttpJsonRpc
             }
         }
 
-        private static void SetContextRequestParameters(JsonRpcContext context)
+        private static async Task SetContextRequestParametersAsync(JsonRpcContext context)
         {
-            var parameterInfos = context.Method.MethodInfo.GetParameters();
+            var rpcMethod = context.Method;
+            var parameterInfos = rpcMethod.MethodInfo.GetParameters();
             var requestParameters = new List<object>();
             var serializer = CreateSerializer();
 
@@ -527,7 +529,15 @@ namespace HttpJsonRpc
                     var valueToken = requestParams.Type == JTokenType.Array ? requestParams[i] : requestParams[parameterName];
                     if (valueToken != null)
                     {
-                        value = valueToken.ToObject(parameter.ParameterType, serializer);
+                        if (context.Method.ParentClass.DeserializeParameterMethod != null)
+                        {
+                            //Expected signature: Task<object> DeserializeParameterAsync(JToken valueToken, ParameterInfo parameter, JsonSerializer serializer, JsonRpcContext context)
+                            value = await (Task<object>) context.Method.ParentClass.DeserializeParameterMethod.Invoke(context.ClassInstance, new object[] {valueToken, parameter, serializer, context});
+                        }
+                        else
+                        {
+                            value = valueToken.ToObject(parameter.ParameterType, serializer);
+                        }
                     }
                 }
 
