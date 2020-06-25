@@ -181,7 +181,7 @@ namespace HttpJsonRpc
                         parameter.Description = parameterAttribute?.Description;
                         parameter.Type = JsonTypeMap.GetJsonType(parameterInfo.ParameterType);
                         parameter.Optional = parameterInfo.IsOptional;
-                        method.Parameters.Add(parameter.Name.ToLowerInvariant(), parameter);
+                        method.Parameters.Add(parameter.Name, parameter);
                     }
 
                     rpcClass.Methods.Add(method.Name.ToLowerInvariant(), method);
