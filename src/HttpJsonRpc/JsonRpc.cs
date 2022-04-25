@@ -32,10 +32,12 @@ namespace HttpJsonRpc
 
         private static List<Func<HttpListenerContext, Task>> OnReceivedHttpRequestAsyncMethods { get; } = new List<Func<HttpListenerContext, Task>>();
         private static List<Func<JsonRpcContext, Task>> OnReceivedRequestAsyncMethods { get; } = new List<Func<JsonRpcContext, Task>>();
+        private static List<Func<JsonRpcContext, Task>> OnCompletedRequestAsyncMethods { get; } = new List<Func<JsonRpcContext, Task>>();
         private static List<Func<Exception, Task>> OnErrorAsyncMethods { get; } = new List<Func<Exception, Task>>();
 
         private static List<Action<HttpListenerContext>> OnReceivedHttpRequestMethods { get; } = new List<Action<HttpListenerContext>>();
         private static List<Action<JsonRpcContext>> OnReceivedRequestMethods { get; } = new List<Action<JsonRpcContext>>();
+        private static List<Action<JsonRpcContext>> OnCompletedRequestMethods { get; } = new List<Action<JsonRpcContext>>();
         private static List<Action<Exception>> OnErrorMethods { get; } = new List<Action<Exception>>();
 
         private JsonRpc()
@@ -89,6 +91,35 @@ namespace HttpJsonRpc
             }
 
             foreach (var method in OnReceivedRequestAsyncMethods)
+            {
+                await method(context);
+            }
+        }
+
+        public static void OnCompletedRequest(Action<JsonRpcContext> method)
+        {
+            OnCompletedRequestMethods.Add(method);
+        }
+
+        public static void OnCompletedRequest(Func<JsonRpcContext, Task> method)
+        {
+            OnCompletedRequestAsyncMethods.Add(method);
+        }
+
+        private static async Task OnCompletedRequestAsync(JsonRpcContext context)
+        {
+            if (context.Method.ParentClass.CompletedRequestMethod != null)
+            {
+                var methodTask = (Task)context.Method.ParentClass.CompletedRequestMethod.Invoke(context.ClassInstance, new object[] { context });
+                if (methodTask != null) await methodTask;
+            }
+
+            foreach (var method in OnCompletedRequestMethods)
+            {
+                method(context);
+            }
+
+            foreach (var method in OnCompletedRequestAsyncMethods)
             {
                 await method(context);
             }
@@ -188,6 +219,7 @@ namespace HttpJsonRpc
                 }
 
                 rpcClass.ReceivedRequestMethod = classMethods.FirstOrDefault(m => Attribute.IsDefined(m, typeof(JsonRpcReceivedRequestAttribute)));
+                rpcClass.CompletedRequestMethod = classMethods.FirstOrDefault(m => Attribute.IsDefined(m, typeof(JsonRpcCompletedRequestAttribute)));
                 rpcClass.DeserializeParameterMethod = classMethods.FirstOrDefault(m => Attribute.IsDefined(m, typeof(JsonRpcDeserializeParameterAttribute)));
 
                 RpcClasses.Add(rpcClass.Name.ToLowerInvariant(), rpcClass);
@@ -359,6 +391,16 @@ namespace HttpJsonRpc
             try
             {
                 await WriteResponseAsync(context.Result);
+            }
+            catch (Exception e)
+            {
+                await HandleErrorAsync(JsonRpcErrorCodes.InternalError, e);
+                return;
+            }
+
+            try
+            {
+                await OnCompletedRequestAsync(context);
             }
             catch (Exception e)
             {
