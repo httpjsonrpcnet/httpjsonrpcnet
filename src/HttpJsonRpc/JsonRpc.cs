@@ -8,6 +8,12 @@ using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading.Tasks;
 using CommonServiceLocator;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -26,16 +32,18 @@ namespace HttpJsonRpc
             Formatting = Formatting.Indented
         };
 
-        private static HttpListener Listener { get; } = new HttpListener();
-        public static ICollection<string> Addresses => Listener.Prefixes;
+        private static IWebHost Host { get; set; }
+        public static Action<KestrelServerOptions> ServerOptions { get; set; } = (o) => o.Listen(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5000));
+        public static Action<CorsPolicyBuilder> CorsPolicy { get; set; }
+
         private static Dictionary<string, JsonRpcClass> RpcClasses { get; } = new Dictionary<string, JsonRpcClass>();
 
-        private static List<Func<HttpListenerContext, Task>> OnReceivedHttpRequestAsyncMethods { get; } = new List<Func<HttpListenerContext, Task>>();
+        private static List<Func<HttpContext, Task>> OnReceivedHttpRequestAsyncMethods { get; } = new List<Func<HttpContext, Task>>();
         private static List<Func<JsonRpcContext, Task>> OnReceivedRequestAsyncMethods { get; } = new List<Func<JsonRpcContext, Task>>();
         private static List<Func<JsonRpcContext, Task>> OnCompletedRequestAsyncMethods { get; } = new List<Func<JsonRpcContext, Task>>();
         private static List<Func<Exception, Task>> OnErrorAsyncMethods { get; } = new List<Func<Exception, Task>>();
 
-        private static List<Action<HttpListenerContext>> OnReceivedHttpRequestMethods { get; } = new List<Action<HttpListenerContext>>();
+        private static List<Action<HttpContext>> OnReceivedHttpRequestMethods { get; } = new List<Action<HttpContext>>();
         private static List<Action<JsonRpcContext>> OnReceivedRequestMethods { get; } = new List<Action<JsonRpcContext>>();
         private static List<Action<JsonRpcContext>> OnCompletedRequestMethods { get; } = new List<Action<JsonRpcContext>>();
         private static List<Action<Exception>> OnErrorMethods { get; } = new List<Action<Exception>>();
@@ -44,17 +52,17 @@ namespace HttpJsonRpc
         {
         }
 
-        public static void OnReceivedHttpRequest(Action<HttpListenerContext> method)
+        public static void OnReceivedHttpRequest(Action<HttpContext> method)
         {
             OnReceivedHttpRequestMethods.Add(method);
         }
 
-        public static void OnReceivedHttpRequest(Func<HttpListenerContext, Task> method)
+        public static void OnReceivedHttpRequest(Func<HttpContext, Task> method)
         {
             OnReceivedHttpRequestAsyncMethods.Add(method);
         }
 
-        private static async Task OnReceivedHttpRequestAsync(HttpListenerContext context)
+        private static async Task OnReceivedHttpRequestAsync(HttpContext context)
         {
             foreach (var method in OnReceivedHttpRequestMethods)
             {
@@ -226,7 +234,7 @@ namespace HttpJsonRpc
             }
         }
 
-        public static void Start(params string[] addresses)
+        public static void Start()
         {
             if (RpcClasses.Count == 0)
             {
@@ -241,39 +249,29 @@ namespace HttpJsonRpc
                 }
             }
 
-            foreach (var address in addresses)
-            {
-                Addresses.Add(address.EndsWith("/") ? address : $"{address}/");
-            }
+            Host = new WebHostBuilder()
+                .ConfigureServices(services =>
+                {
+                    services.AddCors();
+                })
+                .UseKestrel(ServerOptions)
+                .Configure(app =>
+                {
+                    if (CorsPolicy != null)
+                    {
+                        app.UseCors(CorsPolicy);
+                    }
 
-            if (Addresses.Count == 0) Addresses.Add("http://127.0.0.1:5000/");
-
-            Listener.Start();
-
-            CreateLogger()?.LogInformation($"Listening for JSON-RPC requests on {string.Join(", ", Addresses)}");
-
-            ListenForRequests();
+                    app.Run(HandleRequestAsync);
+                })
+                .Build();
+            
+            Host.Start();
+            
+            CreateLogger()?.LogInformation($"Listening for JSON-RPC requests");
         }
 
-        private static async void ListenForRequests()
-        {
-            while (Listener.IsListening)
-            {
-                try
-                {
-                    var httpContext = await Listener.GetContextAsync();
-                    HandleRequest(httpContext);
-                }
-                catch (Exception e)
-                {
-                    var message = "An error occured while accepting a request.";
-                    OnError(e, message);
-                    await OnErrorAsync(e, message);
-                }
-            }
-        }
-
-        private static async void HandleRequest(HttpListenerContext httpContext)
+        private static async Task HandleRequestAsync(HttpContext httpContext)
         {
             var context = new JsonRpcContext { HttpContext = httpContext, SerializerSettings = SerializerSettings};
             JsonRpcContext.Current = context;
@@ -290,18 +288,16 @@ namespace HttpJsonRpc
 
             try
             {
-                if (httpContext.Response.ContentLength64 != 0) return;
+                if ((httpContext.Response.ContentLength ?? 0) != 0) return;
 
-                if (!new[] { "GET", "POST" }.Contains(httpContext.Request.HttpMethod, StringComparer.InvariantCultureIgnoreCase))
+                if (!new[] { "GET", "POST" }.Contains(httpContext.Request.Method, StringComparer.InvariantCultureIgnoreCase))
                 {
                     httpContext.Response.StatusCode = (int)HttpStatusCode.NotFound;
-                    httpContext.Response.OutputStream.Close();
                     return;
                 }
 
-                if (httpContext.Request.RawUrl.EndsWith("favicon.ico"))
+                if (httpContext.Request.Path.Value.EndsWith("favicon.ico"))
                 {
-                    httpContext.Response.OutputStream.Close();
                     return;
                 }
             }
@@ -361,7 +357,7 @@ namespace HttpJsonRpc
                 return;
             }
 
-            if (httpContext.Response.ContentLength64 != 0) return;
+            if ((httpContext.Response.ContentLength ?? 0) != 0) return;
 
             try
             {
@@ -412,7 +408,7 @@ namespace HttpJsonRpc
         private static async Task SetContextRequestJsonAsync(JsonRpcContext context)
         {
             string requestJson = null;
-            if (context.HttpContext.Request.QueryString.Count > 0)
+            if (context.HttpContext.Request.QueryString.HasValue)
             {
                 requestJson = GetRequestFromQueryString();
             }
@@ -445,7 +441,7 @@ namespace HttpJsonRpc
             var httpContext = JsonRpcContext.Current.HttpContext;
 
             string jsonRequest;
-            using (var reader = new StreamReader(httpContext.Request.InputStream))
+            using (var reader = new StreamReader(httpContext.Request.Body))
             {
                 jsonRequest = await reader.ReadToEndAsync();
             }
@@ -461,19 +457,19 @@ namespace HttpJsonRpc
             var parameters = new JObject();
             jRequest["params"] = parameters;
 
-            var queryString = httpContext.Request.QueryString;
-            foreach (var key in queryString.AllKeys)
+            var queryString = httpContext.Request.Query;
+            foreach (var key in queryString.Keys)
             {
                 if (key == null) continue; ;
                 var value = queryString[key];
 
                 if (key == "jsonrpc" || key == "id" || key == "method")
                 {
-                    jRequest[key] = value;
+                    jRequest[key] = value.FirstOrDefault();
                     continue;
                 }
 
-                parameters[key] = value;
+                parameters[key] = value.FirstOrDefault();
             }
 
             //Move unknown values into ExtensionData
@@ -503,7 +499,7 @@ namespace HttpJsonRpc
 
             var jsonRequest = string.Empty;
 
-            using (var reader = new StreamReader(httpContext.Request.InputStream))
+            using (var reader = new StreamReader(httpContext.Request.Body))
             {
                 var boundary = await reader.ReadLineAsync();
                 var multipartString = await reader.ReadToEndAsync();
@@ -627,7 +623,7 @@ namespace HttpJsonRpc
         private static async Task WriteResponseAsync(object result, JsonRpcError error = null)
         {
             var httpContext = JsonRpcContext.Current.HttpContext;
-            var output = httpContext.Response.OutputStream;
+            var output = httpContext.Response.Body;
 
             if (result is JsonRpcStreamResult streamResult)
             {
@@ -635,7 +631,7 @@ namespace HttpJsonRpc
 
                 if (streamResult.Stream.CanSeek)
                 {
-                    httpContext.Response.ContentLength64 = streamResult.Stream.Length;
+                    httpContext.Response.ContentLength = streamResult.Stream.Length;
                 }
 
                 using (streamResult.Stream)
@@ -649,7 +645,7 @@ namespace HttpJsonRpc
 
                 if (stream.CanSeek)
                 {
-                    httpContext.Response.ContentLength64 = stream.Length;
+                    httpContext.Response.ContentLength = stream.Length;
                 }
 
                 using (stream)
@@ -671,16 +667,22 @@ namespace HttpJsonRpc
                 var jsonResponse = JsonConvert.SerializeObject(response, SerializerSettings);
 
                 var byteResponse = Encoding.UTF8.GetBytes(jsonResponse);
-                httpContext.Response.ContentLength64 = byteResponse.Length;
+                
+                httpContext.Response.ContentLength = byteResponse.Length;
                 await output.WriteAsync(byteResponse, 0, byteResponse.Length);
             }
 
             output.Close();
         }
 
-        public static void Stop()
+        public static async Task StopAsync()
         {
-            Listener?.Stop();
+            if (Host == null)
+            {
+                return;
+            }
+
+            await Host.StopAsync();
         }
 
         private static JsonSerializer CreateSerializer()

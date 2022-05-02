@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Threading.Tasks;
 using Autofac;
 using Autofac.Extras.CommonServiceLocator;
@@ -13,7 +14,7 @@ namespace HttpJsonRpc.Sample
     [JsonRpcClass("program")]
     class Program
     {
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             //Configure JsonRpc to use Serilog
             Log.Logger = new LoggerConfiguration()
@@ -27,6 +28,12 @@ namespace HttpJsonRpc.Sample
             {
                 Debug.WriteLine(e.ToString());
             });
+
+            //This can be omitted because Listen on 127.0.0.1:5000 is the default, but it's shown here as an example
+            JsonRpc.ServerOptions = (o) =>
+            {
+                o.Listen(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5000));
+            };
 
             //Setup optional dependency injection
             var builder = new ContainerBuilder();
@@ -46,7 +53,7 @@ namespace HttpJsonRpc.Sample
             }
             
             Console.ReadLine();
-            JsonRpc.Stop();
+            await JsonRpc.StopAsync();
         }
 
         [JsonRpcMethod]
@@ -62,7 +69,7 @@ namespace HttpJsonRpc.Sample
         {
             using (var f = File.Create(fileName))
             {
-                await JsonRpcContext.Current.HttpContext.Request.InputStream.CopyToAsync(f);
+                await JsonRpcContext.Current.HttpContext.Request.Body.CopyToAsync(f);
             }
         }
 

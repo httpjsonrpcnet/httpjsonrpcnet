@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
-using System.Net;
 using System.Threading;
+using Microsoft.AspNetCore.Http;
 using Newtonsoft.Json;
 
 namespace HttpJsonRpc
@@ -14,7 +14,7 @@ namespace HttpJsonRpc
             set => _Current.Value = value;
         }
 
-        public HttpListenerContext HttpContext { get; set; }
+        public HttpContext HttpContext { get; set; }
         public string RequestJson { get; set; }
         public JsonRpcRequest Request { get; set; }
         public JsonRpcMethod Method { get; set; }

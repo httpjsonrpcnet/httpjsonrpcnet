@@ -28,7 +28,7 @@ namespace HttpJsonRpc.Sample
         {
             await Task.CompletedTask;
 
-            Console.WriteLine("OnReceivedRequest in JsonRpcClass");
+            Console.WriteLine("OnReceivedRequest in MathApi");
         }
 
         [JsonRpcDeserializeParameter]
