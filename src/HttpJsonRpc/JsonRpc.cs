@@ -5,7 +5,8 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
-using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using CommonServiceLocator;
 using Microsoft.AspNetCore.Builder;
@@ -15,9 +16,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
 
 namespace HttpJsonRpc
 {
@@ -25,11 +23,9 @@ namespace HttpJsonRpc
     {
         public static ILoggerFactory LoggerFactory { get; set; }
 
-        public static JsonSerializerSettings SerializerSettings { get; set; } = new JsonSerializerSettings
+        public static JsonSerializerOptions SerializerOptions { get; set; } = new JsonSerializerOptions
         {
-            ContractResolver = new CamelCasePropertyNamesContractResolver(),
-            NullValueHandling = NullValueHandling.Ignore,
-            Formatting = Formatting.Indented
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
 
         private static IWebHost Host { get; set; }
@@ -273,7 +269,7 @@ namespace HttpJsonRpc
 
         private static async Task HandleRequestAsync(HttpContext httpContext)
         {
-            var context = new JsonRpcContext { HttpContext = httpContext, SerializerSettings = SerializerSettings};
+            var context = new JsonRpcContext { HttpContext = httpContext, SerializerOptions = SerializerOptions};
             JsonRpcContext.Current = context;
 
             try
@@ -453,8 +449,8 @@ namespace HttpJsonRpc
         {
             var httpContext = JsonRpcContext.Current.HttpContext;
 
-            var jRequest = new JObject();
-            var parameters = new JObject();
+            var jRequest = new JsonObject();
+            var parameters = new JsonObject();
             jRequest["params"] = parameters;
 
             var queryString = httpContext.Request.Query;
@@ -518,7 +514,7 @@ namespace HttpJsonRpc
 
         private static void SetContextRequest(JsonRpcContext context)
         {
-            context.Request = JsonConvert.DeserializeObject<JsonRpcRequest>(context.RequestJson, context.SerializerSettings);
+            context.Request = JsonSerializer.Deserialize<JsonRpcRequest>(context.RequestJson, SerializerOptions);
             if (context.Request == null) throw new ArgumentException("Failed to parse JSON request");
         }
 
@@ -546,7 +542,6 @@ namespace HttpJsonRpc
             var rpcMethod = context.Method;
             var parameterInfos = rpcMethod.MethodInfo.GetParameters();
             var requestParameters = new List<object>();
-            var serializer = CreateSerializer();
 
             for (int i = 0; i < parameterInfos.Length; i++)
             {
@@ -561,20 +556,33 @@ namespace HttpJsonRpc
                 var parameterName = parameterAttribute?.Name ?? parameter.Name;
                 object value = Type.Missing;
 
-                var requestParams = context.Request.Params;
-                if (requestParams != null)
+                if (context.Request.Params != null)
                 {
-                    var valueToken = requestParams.Type == JTokenType.Array ? requestParams[i] : requestParams[parameterName];
-                    if (valueToken != null)
+                    var requestParams = context.Request.Params.Value;
+                    JsonElement valueElement = default;
+
+                    if (requestParams.ValueKind == JsonValueKind.Array)
+                    {
+                        if (i < requestParams.GetArrayLength())
+                        {
+                            valueElement = requestParams[i];
+                        }
+                    }
+                    else
+                    {
+                        requestParams.TryGetProperty(parameterName, out valueElement);
+                    }
+
+                    if (valueElement.ValueKind != JsonValueKind.Undefined)
                     {
                         if (context.Method.ParentClass.DeserializeParameterMethod != null)
                         {
-                            //Expected signature: Task<object> DeserializeParameterAsync(JToken valueToken, ParameterInfo parameter, JsonSerializer serializer, JsonRpcContext context)
-                            value = await (Task<object>) context.Method.ParentClass.DeserializeParameterMethod.Invoke(context.ClassInstance, new object[] {valueToken, parameter, serializer, context});
+                            //Expected signature: Task<object> DeserializeParameterAsync(JsonElement value, ParameterInfo parameter, JsonSerializerOptions serializerOptions, JsonRpcContext context)
+                            value = await (Task<object>) context.Method.ParentClass.DeserializeParameterMethod.Invoke(context.ClassInstance, new object[] {valueElement, parameter, SerializerOptions, context});
                         }
                         else
                         {
-                            value = valueToken.ToObject(parameter.ParameterType, serializer);
+                            value = valueElement.Deserialize(parameter.ParameterType, SerializerOptions);
                         }
                     }
                 }
@@ -664,12 +672,13 @@ namespace HttpJsonRpc
                 };
 
                 httpContext.Response.ContentType = "application/json";
-                var jsonResponse = JsonConvert.SerializeObject(response, SerializerSettings);
 
-                var byteResponse = Encoding.UTF8.GetBytes(jsonResponse);
-                
-                httpContext.Response.ContentLength = byteResponse.Length;
-                await output.WriteAsync(byteResponse, 0, byteResponse.Length);
+                await JsonSerializer.SerializeAsync(output, response, SerializerOptions);
+
+                if (output.CanSeek)
+                {
+                    httpContext.Response.ContentLength = output.Length;
+                }
             }
 
             output.Close();
@@ -683,12 +692,6 @@ namespace HttpJsonRpc
             }
 
             await Host.StopAsync();
-        }
-
-        private static JsonSerializer CreateSerializer()
-        {
-            var settings = JsonRpcContext.Current?.SerializerSettings ?? SerializerSettings;
-            return JsonSerializer.Create(settings);
         }
 
         private static ILogger<JsonRpc> CreateLogger()

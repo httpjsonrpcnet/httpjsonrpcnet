@@ -1,8 +1,7 @@
 ﻿using System;
 using System.Reflection;
+using System.Text.Json;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace HttpJsonRpc.Sample
 {
@@ -32,11 +31,12 @@ namespace HttpJsonRpc.Sample
         }
 
         [JsonRpcDeserializeParameter]
-        public async Task<object> DeserializeParameterAsync(JToken valueToken, ParameterInfo parameter, JsonSerializer serializer, JsonRpcContext context)
+        public async Task<object> DeserializeParameterAsync(JsonElement value, ParameterInfo parameter, JsonSerializerOptions serializerOptions, JsonRpcContext context)
         {
             //This method can be used for custom parameter deserialization
             await Task.CompletedTask;
-            return valueToken.ToObject(parameter.ParameterType, serializer);
+
+            return value.Deserialize(parameter.ParameterType, serializerOptions);
         }
     }
 }

@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Reflection;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace HttpJsonRpc
 {

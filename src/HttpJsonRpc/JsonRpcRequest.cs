@@ -1,5 +1,6 @@
-﻿using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+﻿using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace HttpJsonRpc
 {
@@ -8,9 +9,9 @@ namespace HttpJsonRpc
         public string JsonRpc { get; set; }
         public string Method { get; set; }
         public object Id { get; set; }
-        public JToken Params { get; set; }
+        public JsonElement? Params { get; set; }
 
         [JsonExtensionData]
-        public JObject ExtensionData { get; set; }
+        public Dictionary<string, JsonElement> ExtensionData { get; set; }
     }
 }

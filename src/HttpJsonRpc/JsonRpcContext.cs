@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using Microsoft.AspNetCore.Http;
-using Newtonsoft.Json;
 
 namespace HttpJsonRpc
 {
@@ -21,7 +21,7 @@ namespace HttpJsonRpc
         public object ClassInstance { get; set; }
         public List<object> RequestParameters { get; set; }
         public object Result { get; set; }
-        public JsonSerializerSettings SerializerSettings { get; set; }
+        public JsonSerializerOptions SerializerOptions { get; set; }
 
         public Dictionary<string, object> Values { get; } = new Dictionary<string, object>();
     }

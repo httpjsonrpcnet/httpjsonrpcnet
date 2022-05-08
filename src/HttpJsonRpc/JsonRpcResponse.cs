@@ -1,19 +1,19 @@
-﻿using Newtonsoft.Json;
+﻿using System.Text.Json.Serialization;
 
 namespace HttpJsonRpc
 {
     public class JsonRpcResponse
     {
-        [JsonProperty("jsonrpc")]
+        [JsonPropertyName("jsonrpc")]
         public string JsonRpc { get; set; }
 
-        [JsonProperty("id")]
+        [JsonPropertyName("id")]
         public object Id { get; set; }
 
-        [JsonProperty("result")]
+        [JsonPropertyName("result")]
         public object Result { get; set; }
 
-        [JsonProperty("error")]
+        [JsonPropertyName("error")]
         public JsonRpcError Error { get; set; }
     }
 }
