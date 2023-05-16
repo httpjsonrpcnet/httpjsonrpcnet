@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using System.Text.Json.Serialization;
 
 namespace HttpJsonRpc
 {
@@ -16,13 +17,18 @@ namespace HttpJsonRpc
         private readonly bool _Optional;
         public bool Optional => _Optional;
 
+        private readonly ParameterInfo _ParameterInfo;
+        [JsonIgnore]
+        public ParameterInfo ParameterInfo => _ParameterInfo;
+
         public JsonRpcParameter(ParameterInfo info)
         {
-            var attribute = info.GetCustomAttribute<JsonRpcParameterAttribute>();
-            _Name = attribute?.Name ?? info.Name;
+            _ParameterInfo = info;
+            var attribute = _ParameterInfo.GetCustomAttribute<JsonRpcParameterAttribute>();
+            _Name = attribute?.Name ?? _ParameterInfo.Name;
             _Description = attribute?.Description;
-            _Type = JsonTypeMap.GetJsonType(info.ParameterType);
-            _Optional = info.IsOptional;
+            _Type = JsonTypeMap.GetJsonType(_ParameterInfo.ParameterType);
+            _Optional = _ParameterInfo.IsOptional;
         }
     }
 }
