@@ -1,17 +1,49 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 using System.Reflection;
 
 namespace HttpJsonRpc
 {
     public class JsonRpcClass
     {
-        public string Name { get; set; }
-        public Type ClassType { get; set; }
-        public Dictionary<string, JsonRpcMethod> Methods { get; } = new Dictionary<string, JsonRpcMethod>();
+        private readonly string _Name;
+        public string Name => _Name;
 
-        public MethodInfo ReceivedRequestMethod { get; set; }
-        public MethodInfo CompletedRequestMethod { get; set; }
-        public MethodInfo DeserializeParameterMethod { get; set; }
+        private readonly Type _ClassType;
+        public Type ClassType => _ClassType;
+
+        private readonly ImmutableDictionary<string, JsonRpcMethod> _Methods;
+        public ImmutableDictionary<string, JsonRpcMethod> Methods => _Methods;
+
+        private readonly MethodInfo _ReceivedRequestMethod;
+        public MethodInfo ReceivedRequestMethod => _ReceivedRequestMethod;
+
+        private readonly MethodInfo _CompletedRequestMethod;
+        public MethodInfo CompletedRequestMethod => _CompletedRequestMethod;
+
+        private readonly MethodInfo _DeserializeParameterMethod;
+        public MethodInfo DeserializeParameterMethod => _DeserializeParameterMethod;
+
+        public JsonRpcClass(Type type)
+        {
+            _ClassType = type;
+
+            var classAttribute = _ClassType.GetCustomAttribute<JsonRpcClassAttribute>();
+            _Name = classAttribute.Name ?? type.Name;
+
+            var methodInfos = _ClassType.GetMethods().Where(i => i.IsDefined(typeof(JsonRpcMethodAttribute))).ToArray();
+            var methodsBuilder = ImmutableDictionary.CreateBuilder<string, JsonRpcMethod>();
+            foreach (var m in methodInfos)
+            {
+                var method = new JsonRpcMethod(this, m);
+                methodsBuilder.Add(method.Name.ToLowerInvariant(), method);
+            }
+            _Methods = methodsBuilder.ToImmutable();
+
+            _ReceivedRequestMethod = methodInfos.FirstOrDefault(m => m.IsDefined(typeof(JsonRpcReceivedRequestAttribute)));
+            _CompletedRequestMethod = methodInfos.FirstOrDefault(m => m.IsDefined(typeof(JsonRpcCompletedRequestAttribute)));
+            _DeserializeParameterMethod = methodInfos.FirstOrDefault(m => m.IsDefined(typeof(JsonRpcDeserializeParameterAttribute)));
+        }
     }
 }

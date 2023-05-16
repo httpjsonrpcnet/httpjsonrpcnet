@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -7,6 +8,7 @@ using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using CommonServiceLocator;
 using Microsoft.AspNetCore.Builder;
@@ -25,14 +27,16 @@ namespace HttpJsonRpc
 
         public static JsonSerializerOptions SerializerOptions { get; set; } = new JsonSerializerOptions
         {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            NumberHandling = JsonNumberHandling.AllowReadingFromString
         };
 
         private static IWebHost Host { get; set; }
         public static Action<KestrelServerOptions> ServerOptions { get; set; } = (o) => o.Listen(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5000));
         public static Action<CorsPolicyBuilder> CorsPolicy { get; set; }
 
-        private static Dictionary<string, JsonRpcClass> RpcClasses { get; } = new Dictionary<string, JsonRpcClass>();
+        private static ImmutableDictionary<string, JsonRpcClass> _RpcClasses = ImmutableDictionary<string, JsonRpcClass>.Empty;
+        public static ImmutableDictionary<string, JsonRpcClass> RpcClasses => _RpcClasses;
 
         private static List<Func<HttpContext, Task>> OnReceivedHttpRequestAsyncMethods { get; } = new List<Func<HttpContext, Task>>();
         private static List<Func<JsonRpcContext, Task>> OnReceivedRequestAsyncMethods { get; } = new List<Func<JsonRpcContext, Task>>();
@@ -179,55 +183,14 @@ namespace HttpJsonRpc
         {
             if (fromAssembly == null) throw new ArgumentNullException(nameof(fromAssembly));
 
-            foreach (var t in fromAssembly.DefinedTypes)
+            var classTypes = fromAssembly.DefinedTypes.Where(i => i.IsDefined(typeof(JsonRpcClassAttribute), true)).ToArray();
+            var classesBuilder = _RpcClasses.ToBuilder();
+            foreach (var t in classTypes)
             {
-                var classAttribute = t.GetCustomAttribute<JsonRpcClassAttribute>();
-                if (classAttribute == null) continue;
-
-                var rpcClass = new JsonRpcClass();
-                rpcClass.Name = classAttribute.Name ?? t.Name;
-
-                var classMethods = t.GetMethods();
-                foreach (var m in classMethods)
-                {
-                    var methodAttribute = m.GetCustomAttribute<JsonRpcMethodAttribute>();
-                    if (methodAttribute == null) continue;
-
-                    var name = methodAttribute.Name ?? m.Name;
-                    var asyncIndex = name.LastIndexOf("Async", StringComparison.Ordinal);
-                    if (asyncIndex > -1)
-                    {
-                        name = name.Remove(asyncIndex);
-                    }
-
-                    var method = new JsonRpcMethod();
-                    method.Name = name;
-                    method.Description = methodAttribute.Description;
-                    method.MethodInfo = m;
-                    method.ParentClass = rpcClass;
-
-                    foreach (var parameterInfo in m.GetParameters())
-                    {
-                        var parameterAttribute = parameterInfo.GetCustomAttribute<JsonRpcParameterAttribute>();
-                        if (parameterAttribute?.Ignore ?? false) continue;
-
-                        var parameter = new JsonRpcParameter();
-                        parameter.Name = parameterAttribute?.Name ?? parameterInfo.Name;
-                        parameter.Description = parameterAttribute?.Description;
-                        parameter.Type = JsonTypeMap.GetJsonType(parameterInfo.ParameterType);
-                        parameter.Optional = parameterInfo.IsOptional;
-                        method.Parameters.Add(parameter.Name, parameter);
-                    }
-
-                    rpcClass.Methods.Add(method.Name.ToLowerInvariant(), method);
-                }
-
-                rpcClass.ReceivedRequestMethod = classMethods.FirstOrDefault(m => Attribute.IsDefined(m, typeof(JsonRpcReceivedRequestAttribute)));
-                rpcClass.CompletedRequestMethod = classMethods.FirstOrDefault(m => Attribute.IsDefined(m, typeof(JsonRpcCompletedRequestAttribute)));
-                rpcClass.DeserializeParameterMethod = classMethods.FirstOrDefault(m => Attribute.IsDefined(m, typeof(JsonRpcDeserializeParameterAttribute)));
-
-                RpcClasses.Add(rpcClass.Name.ToLowerInvariant(), rpcClass);
+                var rpcClass = new JsonRpcClass(t);
+                classesBuilder.Add(rpcClass.Name.ToLowerInvariant(), rpcClass);
             }
+            _RpcClasses = classesBuilder.ToImmutable();
         }
 
         public static void Start()
