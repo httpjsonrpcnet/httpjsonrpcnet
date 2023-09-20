@@ -310,6 +310,11 @@ namespace HttpJsonRpc
             {
                 await OnReceivedRequestAsync(context);
             }
+            catch (JsonRpcUnauthorizedException e)
+            {
+                await HandleErrorAsync(JsonRpcErrorCodes.Unauthorized, e);
+                return;
+            }
             catch (Exception e)
             {
                 await HandleErrorAsync(JsonRpcErrorCodes.InternalError, e);
