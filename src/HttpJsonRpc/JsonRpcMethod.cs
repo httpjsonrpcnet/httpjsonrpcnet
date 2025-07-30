@@ -1,10 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
 using System.Reflection;
 using System.Text.Json.Serialization;
-using System.Xml.Linq;
 
 namespace HttpJsonRpc
 {

@@ -188,7 +188,7 @@ namespace HttpJsonRpc
             foreach (var t in classTypes)
             {
                 var rpcClass = new JsonRpcClass(t);
-                classesBuilder.Add(rpcClass.Name.ToLowerInvariant(), rpcClass);
+                classesBuilder.Add(rpcClass.Key, rpcClass);
             }
             _RpcClasses = classesBuilder.ToImmutable();
         }
@@ -427,7 +427,7 @@ namespace HttpJsonRpc
                 if (key == null) continue; ;
                 var value = queryString[key];
 
-                if (key == "jsonrpc" || key == "id" || key == "method")
+                if (key == "jsonrpc" || key == "id" || key == "method" || key == "version")
                 {
                     jRequest[key] = value.FirstOrDefault();
                     continue;
@@ -437,7 +437,9 @@ namespace HttpJsonRpc
             }
 
             //Move unknown values into ExtensionData
-            var rpcMethod = GetMethod(jRequest["method"]?.ToString());
+            var methodName = jRequest["method"]?.ToString();
+            var version = jRequest["version"]?.ToString() ?? "";
+            var rpcMethod = GetMethod(methodName, version);
 
             if (rpcMethod != null)
             {
@@ -488,7 +490,9 @@ namespace HttpJsonRpc
 
         private static void SetContextMethod(JsonRpcContext context)
         {
-            var rpcMethod = GetMethod(context.Request.Method);
+            var methodName = context.Request.Method;
+            var version = context.Request.Version ?? "";
+            var rpcMethod = GetMethod(methodName, version);
 
             if (rpcMethod == null) throw new ArgumentException($"Invalid method '{context.Request.Method}'");
 
@@ -667,7 +671,7 @@ namespace HttpJsonRpc
             return LoggerFactory?.CreateLogger<JsonRpc>();
         }
 
-        private static JsonRpcMethod GetMethod(string fullMethodName)
+        private static JsonRpcMethod GetMethod(string fullMethodName, string version)
         {
             if (string.IsNullOrWhiteSpace(fullMethodName)) return null;
 
@@ -675,9 +679,10 @@ namespace HttpJsonRpc
             if (parts.Length != 2) return null;
 
             var className = parts[0].ToLowerInvariant();
+            var classKey = string.IsNullOrWhiteSpace(version) ? className : $"{version.ToLowerInvariant()}:{className}";
             var methodName = parts[1].ToLowerInvariant();
             
-            if (RpcClasses.TryGetValue(className, out var rpcClass) && rpcClass.Methods.TryGetValue(methodName, out var rpcMethod)) return rpcMethod;
+            if (RpcClasses.TryGetValue(classKey, out var rpcClass) && rpcClass.Methods.TryGetValue(methodName, out var rpcMethod)) return rpcMethod;
 
             return null;
         }

@@ -10,6 +10,7 @@ namespace HttpJsonRpc
         public string Method { get; set; }
         public object Id { get; set; }
         public JsonElement? Params { get; set; }
+        public string Version { get; set; }
 
         [JsonExtensionData]
         public Dictionary<string, JsonElement> ExtensionData { get; set; }

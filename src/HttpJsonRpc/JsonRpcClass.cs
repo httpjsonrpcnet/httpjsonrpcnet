@@ -7,8 +7,14 @@ namespace HttpJsonRpc
 {
     public class JsonRpcClass
     {
+        private readonly string _Key;
+        public string Key => _Key;
+
         private readonly string _Name;
         public string Name => _Name;
+
+        private readonly string _Version;
+        public string Version => _Version;
 
         private readonly Type _ClassType;
         public Type ClassType => _ClassType;
@@ -31,6 +37,8 @@ namespace HttpJsonRpc
 
             var classAttribute = _ClassType.GetCustomAttribute<JsonRpcClassAttribute>();
             _Name = classAttribute.Name ?? type.Name;
+            _Version = classAttribute.Version;
+            _Key = (string.IsNullOrWhiteSpace(_Version) ? _Name : $"{_Version}:{_Name}").ToLowerInvariant();
 
             var methodInfos = _ClassType.GetMethods().Where(i => i.IsDefined(typeof(JsonRpcMethodAttribute))).ToArray();
             var methodsBuilder = ImmutableDictionary.CreateBuilder<string, JsonRpcMethod>();
