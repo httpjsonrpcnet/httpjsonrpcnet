@@ -19,7 +19,7 @@ namespace HttpJsonRpc
         public JsonRpcRequest Request { get; set; }
         public JsonRpcMethod Method { get; set; }
         public object ClassInstance { get; set; }
-        public List<object> RequestParameters { get; set; }
+        public List<object> RequestParameters { get; set; } = new List<object>();
         public object Result { get; set; }
         public JsonSerializerOptions SerializerOptions { get; set; }
 

@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Immutable;
+using System.ComponentModel.DataAnnotations;
+using System.Data;
+using System.Linq;
 using System.Reflection;
 using System.Text.Json.Serialization;
 
@@ -24,6 +27,10 @@ namespace HttpJsonRpc
         [JsonIgnore]
         public JsonRpcClass ParentClass => _ParentClass;
 
+        private readonly Type _ParamsType;
+        [JsonIgnore]
+        public Type ParamsType => _ParamsType;
+
         public JsonRpcMethod(JsonRpcClass parent, MethodInfo info)
         {
             _ParentClass = parent;
@@ -40,17 +47,32 @@ namespace HttpJsonRpc
 
             _Description = attribute.Description;
 
-            var parametersBuilder = ImmutableDictionary.CreateBuilder<string, JsonRpcParameter>();
-            foreach (var parameterInfo in _MethodInfo.GetParameters())
+            var paramaterInfos = _MethodInfo.GetParameters();
+            _ParamsType = paramaterInfos.Where(i => i.IsDefined(typeof(JsonRpcParamsAttribute))).FirstOrDefault()?.ParameterType;
+
+            if (_ParamsType is null)
             {
-                var parameterAttribute = parameterInfo.GetCustomAttribute<JsonRpcParameterAttribute>();
-                if (parameterAttribute?.Ignore ?? false) continue;
-
-                var parameter = new JsonRpcParameter(parameterInfo);
-                parametersBuilder.Add(parameter.Name, parameter);
+                _Parameters = paramaterInfos.Select(p =>
+                {
+                    var attrib = p.GetCustomAttribute<JsonRpcParameterAttribute>();
+                    return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", JsonTypeMap.GetJsonType(p.ParameterType), p.IsOptional);
+                }).ToImmutableDictionary(p => p.Name);
             }
+            else
+            {
+                if (paramaterInfos.Length > 1)
+                {
+                    throw new InvalidOperationException($"The {nameof(JsonRpcParamsAttribute)} attribute is not valid on the method '{_ParentClass.Name}.{_MethodInfo.Name}' because it has multiple parameters. {nameof(JsonRpcParamsAttribute)} must be applied to the only parameter.");
+                }
 
-            _Parameters = parametersBuilder.ToImmutable();
+                _Parameters = _ParamsType.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+                    .Where(p => p.CanWrite)
+                    .Select(p =>
+                    {
+                        var attrib = p.GetCustomAttribute<JsonRpcParameterAttribute>();
+                        return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", JsonTypeMap.GetJsonType(p.PropertyType), !p.IsDefined(typeof(RequiredAttribute)));
+                    }).ToImmutableDictionary(p => p.Name);
+            }
         }
     }
 }

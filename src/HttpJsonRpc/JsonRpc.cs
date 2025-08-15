@@ -512,16 +512,26 @@ namespace HttpJsonRpc
         private static async Task SetContextRequestParametersAsync(JsonRpcContext context)
         {
             var rpcMethod = context.Method;
-            var parameterInfos = rpcMethod.MethodInfo.GetParameters();
-            var requestParameters = new List<object>();
 
+            if (rpcMethod.ParamsType != null)
+            {
+                if (context.Request.Params != null)
+                {
+                    var value = context.Request.Params.Value.Deserialize(rpcMethod.ParamsType, SerializerOptions);
+                    context.RequestParameters.Add(value);
+                }
+
+                return;
+            }
+
+            var parameterInfos = rpcMethod.MethodInfo.GetParameters();
             for (int i = 0; i < parameterInfos.Length; i++)
             {
                 var parameter = parameterInfos[i];
                 var parameterAttribute = parameter.GetCustomAttribute<JsonRpcParameterAttribute>();
                 if (parameterAttribute?.Ignore == true)
                 {
-                    requestParameters.Add(Type.Missing);
+                    context.RequestParameters.Add(Type.Missing);
                     continue;
                 }
 
@@ -559,10 +569,8 @@ namespace HttpJsonRpc
                     }
                 }
 
-                requestParameters.Add(value);
+                context.RequestParameters.Add(value);
             }
-
-            context.RequestParameters = requestParameters;
         }
 
         private static async Task ExecuteMethodAsync(JsonRpcContext context)

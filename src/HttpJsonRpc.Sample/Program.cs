@@ -32,7 +32,7 @@ namespace HttpJsonRpc.Sample
             //This can be omitted because Listen on 127.0.0.1:5000 is the default, but it's shown here as an example
             JsonRpc.ServerOptions = (o) =>
             {
-                o.Listen(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5002));
+                o.Listen(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5000));
             };
 
             //Setup optional dependency injection
