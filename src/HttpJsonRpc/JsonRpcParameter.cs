@@ -1,25 +1,22 @@
-﻿namespace HttpJsonRpc
+﻿using System;
+
+namespace HttpJsonRpc
 {
     public class JsonRpcParameter
     {
-        private readonly string _Name;
-        public string Name => _Name;
+        public string Name { get; }
+        public string Description { get; }
+        public Type ClrType { get; }
+        public string JsonType { get; }
+        public bool Optional { get; }
 
-        private readonly string _Description;
-        public string Description => _Description;
-
-        private readonly string _Type;
-        public string Type => _Type;
-
-        private readonly bool _Optional;
-        public bool Optional => _Optional;
-
-        public JsonRpcParameter(string name, string description, string type, bool optional)
+        public JsonRpcParameter(string name, string description, Type clrType, bool optional)
         {
-            _Name = name;
-            _Description = description;
-            _Type = type;
-            _Optional = optional;
+            Name = name;
+            Description = description;
+            ClrType = clrType;
+            JsonType = JsonTypeMap.GetJsonType(clrType);
+            Optional = optional;
         }
     }
 }

@@ -55,7 +55,7 @@ namespace HttpJsonRpc
                 _Parameters = paramaterInfos.Select(p =>
                 {
                     var attrib = p.GetCustomAttribute<JsonRpcParameterAttribute>();
-                    return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", JsonTypeMap.GetJsonType(p.ParameterType), p.IsOptional);
+                    return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", p.ParameterType, p.IsOptional);
                 }).ToImmutableDictionary(p => p.Name);
             }
             else
@@ -70,7 +70,7 @@ namespace HttpJsonRpc
                     .Select(p =>
                     {
                         var attrib = p.GetCustomAttribute<JsonRpcParameterAttribute>();
-                        return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", JsonTypeMap.GetJsonType(p.PropertyType), !p.IsDefined(typeof(RequiredAttribute)));
+                        return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", p.PropertyType, !p.IsDefined(typeof(RequiredAttribute)));
                     }).ToImmutableDictionary(p => p.Name);
             }
         }
