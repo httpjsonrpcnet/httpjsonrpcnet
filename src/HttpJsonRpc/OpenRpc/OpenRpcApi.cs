@@ -14,11 +14,11 @@ namespace HttpJsonRpc
             await Task.CompletedTask;
 
             var context = JsonRpcContext.Current;
-            var options = JsonRpc.Options.OpenRpc;
+            var options = JsonRpc.Options;
             var rpcClasses = JsonRpc.RpcClasses.Values.ToArray();
             var rpcMethods = rpcClasses
                 .SelectMany(c => c.Methods.Values)
-                .Where(m => JsonRpc.Options.OpenRpc.MethodFilters.All(f => f.Invoke(context, m)))
+                .Where(m => options.OpenRpc.MethodFilters.All(f => f.Invoke(context, m)))
                 .ToArray();
 
             var schemaGenerator = new OpenRpcSchemaGenerator(options);
@@ -55,7 +55,7 @@ namespace HttpJsonRpc
 
             return new OpenRpcDocument
             {
-                Info = options.Info,
+                Info = options.OpenRpc.Info,
                 Methods = methods.ToArray(),
                 Components = new OpenRpcComponents
                 {

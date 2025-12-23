@@ -1,29 +1,31 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.Text.Json.Serialization;
 
 namespace HttpJsonRpc
 {
     public class OpenRpcSchemaGenerator
     {
-        public OpenRpcOptions Options { get; }
+        public JsonRpcOptions Options { get; }
         public Dictionary<string, OpenRpcSchema> Schemas { get; } = new Dictionary<string, OpenRpcSchema>();
 
-        public OpenRpcSchemaGenerator(OpenRpcOptions options)
+        public OpenRpcSchemaGenerator(JsonRpcOptions options)
         {
             Options = options;
         }
 
         public string GetName(Type type)
         {
-            return Options.TypeConverters
+            return Options.OpenRpc.TypeConverters
                 .FirstOrDefault(i => i.CanConvert(this, type))
                 ?.GetName(this, type) ?? type.Name;
         }
 
         public OpenRpcTypeInfo GetTypeInfo(OpenRpcTypeInfo info)
         {
-            return Options.TypeConverters
+            return Options.OpenRpc.TypeConverters
                 .FirstOrDefault(i => i.CanConvert(this, info.Type))
                 ?.Convert(this, info) ?? info;
         }
@@ -31,6 +33,30 @@ namespace HttpJsonRpc
         private OpenRpcTypeInfo GetTypeInfo(Type type)
         {
             return GetTypeInfo(new OpenRpcTypeInfo { Type = type });
+        }
+
+        private Dictionary<string, OpenRpcSchema> GetProperties(Type type)
+        {
+            var properties = new Dictionary<string, OpenRpcSchema>();
+            foreach (var prop in type.GetProperties())
+            {
+                var ignoreAttribute = prop.GetCustomAttribute<JsonIgnoreAttribute>();
+                if (ignoreAttribute != null && ignoreAttribute.Condition == JsonIgnoreCondition.Always)
+                {
+                    continue;
+                }
+
+                var nameAttribute = prop.GetCustomAttribute<JsonPropertyNameAttribute>();
+                var name = nameAttribute?.Name ?? prop.Name;
+                if (Options.SerializerOptions.PropertyNamingPolicy != null)
+                {
+                    name = Options.SerializerOptions.PropertyNamingPolicy.ConvertName(name);
+                }
+
+                properties[name] = GetSchema(prop.PropertyType);
+            }
+
+            return properties;
         }
 
         public OpenRpcSchema GetSchema(Type type)
@@ -83,9 +109,7 @@ namespace HttpJsonRpc
 
                     if (!info.IsOpaque)
                     {
-                        objectSchema.Properties = info.Type.GetProperties().ToDictionary(
-                            p => p.Name.ToLowerFirstChar(),
-                            p => GetSchema(p.PropertyType));
+                        objectSchema.Properties = GetProperties(info.Type);
                     }
 
                     if (info.CanRefence)

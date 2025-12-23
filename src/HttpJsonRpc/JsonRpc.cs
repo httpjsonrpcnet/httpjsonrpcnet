@@ -8,7 +8,6 @@ using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using CommonServiceLocator;
 using Microsoft.AspNetCore.Builder;
@@ -23,17 +22,13 @@ namespace HttpJsonRpc
 {
     public class JsonRpc
     {
-        public static ILoggerFactory LoggerFactory { get; set; }
-
-        public static JsonSerializerOptions SerializerOptions { get; set; } = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            NumberHandling = JsonNumberHandling.AllowReadingFromString
-        };
-
         private static IWebHost Host { get; set; }
-        public static Action<KestrelServerOptions> ServerOptions { get; set; } = (o) => o.Listen(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5000));
-        public static Action<CorsPolicyBuilder> CorsPolicy { get; set; }
+
+        public static JsonRpcOptions Options { get; } = new JsonRpcOptions();
+        public static ILoggerFactory LoggerFactory { get => Options.LoggerFactory; set => Options.LoggerFactory = value; }
+        public static JsonSerializerOptions SerializerOptions { get => Options.SerializerOptions; set => Options.SerializerOptions = value; }
+        public static Action<KestrelServerOptions> ServerOptions { get => Options.ServerOptions; set => Options.ServerOptions = value; }
+        public static Action<CorsPolicyBuilder> CorsPolicy { get => Options.CorsPolicy; set => Options.CorsPolicy = value; }
 
         private static ImmutableDictionary<string, JsonRpcClass> _RpcClasses = ImmutableDictionary<string, JsonRpcClass>.Empty;
         public static ImmutableDictionary<string, JsonRpcClass> RpcClasses => _RpcClasses;
@@ -47,8 +42,6 @@ namespace HttpJsonRpc
         private static List<Action<JsonRpcContext>> OnReceivedRequestMethods { get; } = new List<Action<JsonRpcContext>>();
         private static List<Action<JsonRpcContext>> OnCompletedRequestMethods { get; } = new List<Action<JsonRpcContext>>();
         private static List<Action<Exception>> OnErrorMethods { get; } = new List<Action<Exception>>();
-
-        public static JsonRpcOptions Options { get; } = new JsonRpcOptions();
 
         private JsonRpc()
         {
