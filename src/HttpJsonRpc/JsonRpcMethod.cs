@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
-using System.Data;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json.Serialization;
@@ -16,8 +15,8 @@ namespace HttpJsonRpc
         private readonly string _Description;
         public string Description => _Description;
 
-        private readonly ImmutableDictionary<string, JsonRpcParameter> _Parameters;
-        public ImmutableDictionary<string, JsonRpcParameter> Parameters => _Parameters;
+        private readonly ImmutableArray<JsonRpcParameter> _Parameters;
+        public ImmutableArray<JsonRpcParameter> Parameters => _Parameters;
 
         private readonly MethodInfo _MethodInfo;
         [JsonIgnore]
@@ -56,7 +55,7 @@ namespace HttpJsonRpc
                 {
                     var attrib = p.GetCustomAttribute<JsonRpcParameterAttribute>();
                     return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", p.ParameterType, p.IsOptional);
-                }).ToImmutableDictionary(p => p.Name);
+                }).ToImmutableArray();
             }
             else
             {
@@ -71,7 +70,7 @@ namespace HttpJsonRpc
                     {
                         var attrib = p.GetCustomAttribute<JsonRpcParameterAttribute>();
                         return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", p.PropertyType, !p.IsDefined(typeof(RequiredAttribute)));
-                    }).ToImmutableDictionary(p => p.Name);
+                    }).ToImmutableArray();
             }
         }
     }

@@ -8,7 +8,7 @@ namespace HttpJsonRpc
         public string Message { get; set; }
         public object Data { get; set; }
 
-        public static JsonRpcError Create(int code, Exception ex = null)
+        public static JsonRpcError Create(int code, Exception ex = null, bool includeStackTrace = true)
         {
             var e = new JsonRpcError
             {
@@ -25,8 +25,7 @@ namespace HttpJsonRpc
 
                 e.Data = new JsonRpcExceptionData
                 {
-                    Message = ex.Message,
-                    StackTrace = ex.StackTrace
+                    StackTrace = includeStackTrace ? ex.StackTrace : null
                 };
             }
 

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 
 namespace HttpJsonRpc
@@ -42,15 +43,29 @@ namespace HttpJsonRpc
             Types.Add(typeof(TimeSpan), "string");
             Types.Add(typeof(TimeSpan?), "string");
             Types.Add(typeof(string), "string");
+            Types.Add(typeof(void), null);
         }
 
         public static string GetJsonType(Type type)
         {
             if (type == null) throw new ArgumentNullException(nameof(type));
 
-            Types.TryGetValue(type, out var jsonType);
+            if (Types.TryGetValue(type, out var jsonType))
+            {
+                return jsonType;
+            }
 
-            return jsonType ?? type.Name;
+            if (typeof(IDictionary).IsAssignableFrom(type))
+            {
+                return "object";
+            }
+
+            if (typeof(IEnumerable).IsAssignableFrom(type))
+            {
+                return "array";
+            }
+
+            return "object";
         }
     }
 }

@@ -16,10 +16,11 @@ namespace HttpJsonRpc.Sample
         }
 
         [JsonRpcMethod(Description = "Provides the sum of two numbers.")]
-        public Task<int> SumAsync(int n1, int n2)
+        public async Task<int> SumAsync([JsonRpcParameter(Description = "The first number")] int n1, [JsonRpcParameter(Description = "The second number")] int n2)
         {
+            await Task.CompletedTask;
             var value = MathService.Sum(n1, n2);
-            return Task.FromResult(value);
+            return value;
         }
 
         [JsonRpcReceivedRequest]

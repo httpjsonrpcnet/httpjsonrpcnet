@@ -31,6 +31,9 @@ namespace HttpJsonRpc
         private readonly MethodInfo _DeserializeParameterMethod;
         public MethodInfo DeserializeParameterMethod => _DeserializeParameterMethod;
 
+        private readonly MethodInfo _GetSerializerOptionsMethod;
+        public MethodInfo GetSerializerOptionsMethod => _GetSerializerOptionsMethod;
+
         public JsonRpcClass(Type type)
         {
             _ClassType = type;
@@ -40,9 +43,10 @@ namespace HttpJsonRpc
             _Version = classAttribute.Version;
             _Key = (string.IsNullOrWhiteSpace(_Version) ? _Name : $"{_Version}:{_Name}").ToLowerInvariant();
 
-            var methodInfos = _ClassType.GetMethods().Where(i => i.IsDefined(typeof(JsonRpcMethodAttribute))).ToArray();
+            var methodInfos = _ClassType.GetMethods().ToArray();
+            var rpcMethods = methodInfos.Where(i => i.IsDefined(typeof(JsonRpcMethodAttribute))).ToArray();
             var methodsBuilder = ImmutableDictionary.CreateBuilder<string, JsonRpcMethod>();
-            foreach (var m in methodInfos)
+            foreach (var m in rpcMethods)
             {
                 var method = new JsonRpcMethod(this, m);
                 methodsBuilder.Add(method.Name.ToLowerInvariant(), method);
@@ -52,6 +56,7 @@ namespace HttpJsonRpc
             _ReceivedRequestMethod = methodInfos.FirstOrDefault(m => m.IsDefined(typeof(JsonRpcReceivedRequestAttribute)));
             _CompletedRequestMethod = methodInfos.FirstOrDefault(m => m.IsDefined(typeof(JsonRpcCompletedRequestAttribute)));
             _DeserializeParameterMethod = methodInfos.FirstOrDefault(m => m.IsDefined(typeof(JsonRpcDeserializeParameterAttribute)));
+            _GetSerializerOptionsMethod = methodInfos.FirstOrDefault(m => m.IsDefined(typeof(JsonRpcGetSerializerOptionsAttribute)));
         }
     }
 }

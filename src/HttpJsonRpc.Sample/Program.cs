@@ -35,10 +35,18 @@ namespace HttpJsonRpc.Sample
                 o.Listen(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5000));
             };
 
+            //Cors policy
+            JsonRpc.CorsPolicy = (o) =>
+            {
+                o.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+            };
+
             //Setup optional dependency injection
             var builder = new ContainerBuilder();
             builder.RegisterType<MathApi>();
             builder.RegisterType<MathService>().As<IMathService>();
+            builder.RegisterType<CustomerService>();
+            builder.RegisterType<OpenRpcApi>();
             var container = builder.Build();
             var csl = new AutofacServiceLocator(container);
             ServiceLocator.SetLocatorProvider(() => csl);

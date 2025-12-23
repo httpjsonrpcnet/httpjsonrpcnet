@@ -1,0 +1,118 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace HttpJsonRpc
+{
+    public class OpenRpcSchemaGenerator
+    {
+        public OpenRpcOptions Options { get; }
+        public Dictionary<string, OpenRpcSchema> Schemas { get; } = new Dictionary<string, OpenRpcSchema>();
+
+        public OpenRpcSchemaGenerator(OpenRpcOptions options)
+        {
+            Options = options;
+        }
+
+        public string GetName(Type type)
+        {
+            return Options.TypeConverters
+                .FirstOrDefault(i => i.CanConvert(this, type))
+                ?.GetName(this, type) ?? type.Name;
+        }
+
+        public OpenRpcTypeInfo GetTypeInfo(OpenRpcTypeInfo info)
+        {
+            return Options.TypeConverters
+                .FirstOrDefault(i => i.CanConvert(this, info.Type))
+                ?.Convert(this, info) ?? info;
+        }
+
+        private OpenRpcTypeInfo GetTypeInfo(Type type)
+        {
+            return GetTypeInfo(new OpenRpcTypeInfo { Type = type });
+        }
+
+        public OpenRpcSchema GetSchema(Type type)
+        {
+            var name = GetName(type);
+            if (name != null && Schemas.ContainsKey(name))
+            {
+                return new OpenRpcSchema
+                {
+                    Ref = $"#/components/schemas/{name}"
+                };
+            }
+
+            var info = GetTypeInfo(type);
+            var jsonType = JsonTypeMap.GetJsonType(info.Type);
+            if (jsonType is null)
+            {
+                return null;
+            }
+
+            OpenRpcSchema schema = null;
+
+            switch (jsonType)
+            {
+                case "array":
+                    var itemType = info.Type.IsArray
+                        ? info.Type.GetElementType()
+                        : info.Type.GetGenericArguments().FirstOrDefault() ?? typeof(object);
+
+                    schema = new OpenRpcSchema
+                    {
+                        Items = GetSchema(itemType)
+                    };
+                    schema.AddType("array");
+
+                    break;
+                case "object":
+                    name = info.Type.Name;
+                    var objectSchema = new OpenRpcSchema
+                    {
+                        Nullable = info.Nullable
+                    };
+                    objectSchema.AddType("object");
+
+                    if (info.CanRefence)
+                    {
+                        // Add to Schemas BEFORE recursing to prevent infinite recursion
+                        Schemas.Add(name, objectSchema);
+                    }
+
+                    if (!info.IsOpaque)
+                    {
+                        objectSchema.Properties = info.Type.GetProperties().ToDictionary(
+                            p => p.Name.ToLowerFirstChar(),
+                            p => GetSchema(p.PropertyType));
+                    }
+
+                    if (info.CanRefence)
+                    {
+                        schema = new OpenRpcSchema
+                        {
+                            Ref = $"#/components/schemas/{name}"
+                        };
+                    }
+                    else
+                    {
+                        schema = objectSchema;
+                    }
+
+                    break;
+                default:
+                    schema = new OpenRpcSchema();
+                    schema.AddType(jsonType);
+                    break;
+            }
+
+            if (info?.Nullable ?? false)
+            {
+                schema.AddType("null");
+            }
+
+            return schema;
+        }
+    }
+}
