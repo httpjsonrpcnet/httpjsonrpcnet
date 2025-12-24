@@ -29,5 +29,6 @@ namespace HttpJsonRpc
         };
         public Action<KestrelServerOptions> ServerOptions { get; set; } = (o) => o.Listen(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5000));
         public Action<CorsPolicyBuilder> CorsPolicy { get; set; }
+        public bool IncludeStackTraceInErrors { get; set; } = true;
     }
 }

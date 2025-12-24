@@ -14,7 +14,7 @@ namespace HttpJsonRpc
 
         public virtual JsonRpcError CreateError(CreateErrorArgs args)
         {
-            return JsonRpcError.Create(args.ErrorCode, args.Exception);
+            return JsonRpcError.Create(args.ErrorCode, args.Exception, args.Options.IncludeStackTraceInErrors);
         }
     }
 }
