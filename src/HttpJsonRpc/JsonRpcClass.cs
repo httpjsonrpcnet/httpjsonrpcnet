@@ -39,9 +39,9 @@ namespace HttpJsonRpc
             _ClassType = type;
 
             var classAttribute = _ClassType.GetCustomAttribute<JsonRpcClassAttribute>();
-            _Name = classAttribute.Name ?? type.Name;
+            _Name = classAttribute.Name ?? type.Name.ToLowerFirstChar();
             _Version = classAttribute.Version;
-            _Key = (string.IsNullOrWhiteSpace(_Version) ? _Name : $"{_Version}:{_Name}").ToLowerInvariant();
+            _Key = (string.IsNullOrWhiteSpace(_Version) ? _Name : $"{_Version}:{_Name}");
 
             var methodInfos = _ClassType.GetMethods().ToArray();
             var rpcMethods = methodInfos.Where(i => i.IsDefined(typeof(JsonRpcMethodAttribute))).ToArray();

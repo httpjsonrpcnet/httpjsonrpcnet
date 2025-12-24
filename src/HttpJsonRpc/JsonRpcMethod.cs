@@ -30,6 +30,10 @@ namespace HttpJsonRpc
         [JsonIgnore]
         public Type ParamsType => _ParamsType;
 
+        private readonly string _FullName;
+        [JsonIgnore]
+        public string FullName => _FullName;
+
         public JsonRpcMethod(JsonRpcClass parent, MethodInfo info)
         {
             _ParentClass = parent;
@@ -37,12 +41,13 @@ namespace HttpJsonRpc
 
             var attribute = _MethodInfo.GetCustomAttribute<JsonRpcMethodAttribute>();
 
-            _Name = attribute.Name ?? _MethodInfo.Name;
+            _Name = attribute.Name ?? _MethodInfo.Name.ToLowerFirstChar();
             var asyncIndex = _Name.LastIndexOf("Async", StringComparison.Ordinal);
             if (asyncIndex > -1)
             {
                 _Name = _Name.Remove(asyncIndex);
             }
+            _FullName = $"{_ParentClass.Name}.{_Name}";
 
             _Description = attribute.Description;
 
