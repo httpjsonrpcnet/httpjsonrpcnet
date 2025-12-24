@@ -17,7 +17,8 @@ namespace HttpJsonRpc
             "System.",
             "Microsoft.",
             "netstandard",
-            "CommonServiceLocator"
+            "CommonServiceLocator",
+            "HttpJsonRpc",
         };
         public JsonRpcErrorFactory ErrorFactory { get; set; } = new JsonRpcErrorFactory();
         public ILoggerFactory LoggerFactory { get; set; }

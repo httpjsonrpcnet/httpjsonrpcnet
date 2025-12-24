@@ -174,6 +174,12 @@ namespace HttpJsonRpc
             logger?.LogError(e, message);
         }
 
+        public static void RegisterClass(Type type)
+        {
+            var rpcClass = new JsonRpcClass(type);
+            _RpcClasses = _RpcClasses.Add(rpcClass.Key, rpcClass);
+        }
+
         public static void RegisterMethods(Assembly fromAssembly)
         {
             if (fromAssembly == null) throw new ArgumentNullException(nameof(fromAssembly));
@@ -199,6 +205,11 @@ namespace HttpJsonRpc
                 {
                     RegisterMethods(assembly);
                 }
+            }
+
+            if (Options.OpenRpc.IsEnabled)
+            {
+                RegisterClass(typeof(OpenRpcApi));
             }
 
             Host = new WebHostBuilder()

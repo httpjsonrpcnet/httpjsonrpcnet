@@ -6,6 +6,8 @@ namespace HttpJsonRpc
 {
     public class OpenRpcOptions
     {
+        public bool IsEnabled { get; set; } = false;
+
         public OpenRpcInfo Info { get; } = new OpenRpcInfo
         {
             Title = Assembly.GetEntryAssembly()?.GetName().Name,

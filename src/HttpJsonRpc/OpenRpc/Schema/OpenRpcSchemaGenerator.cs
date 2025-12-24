@@ -18,9 +18,24 @@ namespace HttpJsonRpc
 
         public string GetName(Type type)
         {
-            return Options.OpenRpc.TypeConverters
-                .FirstOrDefault(i => i.CanConvert(this, type))
-                ?.GetName(this, type) ?? type.Name;
+            var converter = Options.OpenRpc.TypeConverters
+                .FirstOrDefault(i => i.CanConvert(this, type));
+
+            if (converter != null)
+            {
+                return converter.GetName(this, type);
+            }
+
+            if (!type.IsGenericType) return type.Name;
+
+            var parts = new List<string>
+            {
+                type.Name.Substring(0, type.Name.IndexOf('`'))
+            };
+
+            parts.AddRange(type.GetGenericArguments().Select(GetName));
+
+            return string.Join("_", parts);
         }
 
         public OpenRpcTypeInfo GetTypeInfo(OpenRpcTypeInfo info)
@@ -94,7 +109,6 @@ namespace HttpJsonRpc
 
                     break;
                 case "object":
-                    name = info.Type.Name;
                     var objectSchema = new OpenRpcSchema
                     {
                         Nullable = info.Nullable

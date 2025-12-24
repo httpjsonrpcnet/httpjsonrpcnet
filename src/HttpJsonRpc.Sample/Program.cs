@@ -41,6 +41,9 @@ namespace HttpJsonRpc.Sample
                 o.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
             };
 
+            //Enable OpenRPC
+            JsonRpc.Options.OpenRpc.IsEnabled = true;
+
             //Setup optional dependency injection
             var builder = new ContainerBuilder();
             builder.RegisterType<MathApi>();
@@ -50,6 +53,9 @@ namespace HttpJsonRpc.Sample
             var container = builder.Build();
             var csl = new AutofacServiceLocator(container);
             ServiceLocator.SetLocatorProvider(() => csl);
+
+            //Automatically scan this assembly for JsonRpc methods
+            JsonRpc.RegisterMethods(typeof(Program).Assembly);
 
             try
             {

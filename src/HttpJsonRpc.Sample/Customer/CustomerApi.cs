@@ -13,13 +13,13 @@ namespace HttpJsonRpc.Sample
         }
 
         [JsonRpcMethod]
-        public async Task<Customer[]> ListAsync([JsonRpcParams] ListCustomerParams @params)
+        public async Task<Customer[]> ListAsync(ListParams<CustomerFilter> @params)
         {
             return await CustomerService.ListAsync(@params.Filter);
         }
 
         [JsonRpcMethod]
-        public async Task<Customer> GetAsync([JsonRpcParams] ListCustomerParams @params)
+        public async Task<Customer> GetAsync(ListParams<CustomerFilter> @params)
         {
             return await CustomerService.GetAsync(@params.Filter);
         }

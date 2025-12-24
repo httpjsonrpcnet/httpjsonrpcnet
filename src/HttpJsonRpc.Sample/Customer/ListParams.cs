@@ -2,9 +2,9 @@
 
 namespace HttpJsonRpc.Sample
 {
-    public class ListCustomerParams
+    public class ListParams<TFilter>
     {
         [Required]
-        public CustomerFilter Filter { get; set; }
+        public TFilter Filter { get; set; }
     }
 }
