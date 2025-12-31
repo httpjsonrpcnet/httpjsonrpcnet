@@ -433,7 +433,7 @@ namespace HttpJsonRpc
             }
             catch (Exception ex)
             {
-                throw new Exception($"Failed to parse query string JSON for merging: {ex.Message}", ex);
+                throw new Exception($"Failed to parse query string JSON for merging. Error: {ex.Message}", ex);
             }
 
             try
@@ -442,12 +442,17 @@ namespace HttpJsonRpc
             }
             catch (Exception ex)
             {
-                throw new Exception($"Failed to parse body JSON for merging: {ex.Message}", ex);
+                throw new Exception($"Failed to parse body JSON for merging. Error: {ex.Message}", ex);
             }
 
-            if (queryObject == null || bodyObject == null)
+            if (queryObject == null)
             {
-                throw new Exception("Failed to parse request JSON for merging (parsed to null).");
+                throw new Exception("Failed to parse query string JSON for merging (parsed to null).");
+            }
+
+            if (bodyObject == null)
+            {
+                throw new Exception("Failed to parse body JSON for merging (parsed to null).");
             }
 
             // Start with body as base (we'll merge query into it or vice versa)
