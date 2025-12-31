@@ -23,6 +23,16 @@ namespace HttpJsonRpc.Sample
             return value;
         }
 
+        [JsonRpcMethod(Description = "Test method to validate parameter merging from query string and body.")]
+        public async Task<string> TestMergeAsync(
+            [JsonRpcParameter(Description = "First parameter")] string param1,
+            [JsonRpcParameter(Description = "Second parameter")] string param2,
+            [JsonRpcParameter(Description = "Third parameter")] string param3 = null)
+        {
+            await Task.CompletedTask;
+            return $"param1={param1}, param2={param2}, param3={param3 ?? "null"}";
+        }
+
         [JsonRpcReceivedRequest]
         public async Task OnReceivedRequestAsync(JsonRpcContext context)
         {

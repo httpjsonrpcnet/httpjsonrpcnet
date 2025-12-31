@@ -376,32 +376,167 @@ namespace HttpJsonRpc
         private static async Task SetContextRequestJsonAsync(JsonRpcContext context)
         {
             string requestJson = null;
-            if (context.HttpContext.Request.QueryString.HasValue)
+            bool hasQueryString = context.HttpContext.Request.QueryString.HasValue;
+            string queryStringJson = null;
+            string bodyJson = null;
+
+            // Get query string parameters if available
+            if (hasQueryString)
             {
-                requestJson = GetRequestFromQueryString();
+                queryStringJson = GetRequestFromQueryString();
             }
-            else
+
+            // Get body content if available
+            var contentType = context.HttpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
+            if (contentType != null)
             {
-                var contentType = context.HttpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
-                if (contentType != null)
+                switch (contentType)
                 {
-                    switch (contentType)
-                    {
-                        case "application/json":
-                            requestJson = await GetRequestFromBodyAsync();
-                            break;
-                        case "multipart/form-data":
-                            requestJson = await GetRequestFromFormAsync();
-                            break;
-                        default:
-                            throw new Exception($"{contentType} is not a supported content-type.");
-                    }
+                    case "application/json":
+                        bodyJson = await GetRequestFromBodyAsync();
+                        break;
+                    case "multipart/form-data":
+                        bodyJson = await GetRequestFromFormAsync();
+                        break;
+                    default:
+                        throw new Exception($"{contentType} is not a supported content-type.");
                 }
+            }
+
+            // Merge parameters from both sources if both exist
+            if (!string.IsNullOrWhiteSpace(queryStringJson) && !string.IsNullOrWhiteSpace(bodyJson))
+            {
+                requestJson = MergeRequestJson(queryStringJson, bodyJson, Options.ParameterMergePrecedence);
+            }
+            else if (!string.IsNullOrWhiteSpace(queryStringJson))
+            {
+                requestJson = queryStringJson;
+            }
+            else if (!string.IsNullOrWhiteSpace(bodyJson))
+            {
+                requestJson = bodyJson;
             }
 
             if (string.IsNullOrWhiteSpace(requestJson)) throw new Exception($"Request is empty.");
 
             context.RequestJson = requestJson;
+        }
+
+        private static string MergeRequestJson(string queryStringJson, string bodyJson, ParameterPrecedence precedence)
+        {
+            JsonObject queryObject;
+            JsonObject bodyObject;
+
+            try
+            {
+                queryObject = JsonNode.Parse(queryStringJson) as JsonObject;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Failed to parse query string JSON for merging. Error: {ex.Message}", ex);
+            }
+
+            try
+            {
+                bodyObject = JsonNode.Parse(bodyJson) as JsonObject;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Failed to parse body JSON for merging. Error: {ex.Message}", ex);
+            }
+
+            if (queryObject == null)
+            {
+                throw new Exception("Failed to parse query string JSON for merging (parsed to null).");
+            }
+
+            if (bodyObject == null)
+            {
+                throw new Exception("Failed to parse body JSON for merging (parsed to null).");
+            }
+
+            // Start with body as base (we'll merge query into it or vice versa)
+            var mergedObject = new JsonObject();
+
+            // Merge top-level properties (jsonrpc, id, method, version, etc.)
+            // Note: For top-level properties, query string values always override body values
+            // This is intentional as these properties define the request itself (method, id, etc.)
+            // The ParameterPrecedence setting only affects the 'params' object
+            foreach (var prop in bodyObject)
+            {
+                if (prop.Key != "params")
+                {
+                    mergedObject[prop.Key] = prop.Value?.DeepClone();
+                }
+            }
+
+            foreach (var prop in queryObject)
+            {
+                if (prop.Key != "params")
+                {
+                    // Query string values override body values for top-level properties
+                    mergedObject[prop.Key] = prop.Value?.DeepClone();
+                }
+            }
+
+            // Merge params based on precedence strategy
+            var queryParams = queryObject["params"] as JsonObject;
+            var bodyParams = bodyObject["params"] as JsonObject;
+
+            var mergedParams = MergeParams(queryParams, bodyParams, precedence);
+
+            mergedObject["params"] = mergedParams;
+
+            return mergedObject.ToString();
+        }
+
+        private static JsonObject MergeParams(JsonObject queryParams, JsonObject bodyParams, ParameterPrecedence precedence)
+        {
+            var mergedParams = new JsonObject();
+
+            if (precedence == ParameterPrecedence.Strict)
+            {
+                // In strict mode, check for duplicate parameters
+                if (queryParams != null && bodyParams != null)
+                {
+                    var duplicates = queryParams.Select(p => p.Key)
+                        .Intersect(bodyParams.Select(p => p.Key))
+                        .ToList();
+
+                    if (duplicates.Any())
+                    {
+                        throw new Exception($"Duplicate parameters found in both query string and body (Strict mode): {string.Join(", ", duplicates)}");
+                    }
+                }
+
+                // No duplicates, merge all parameters
+                CopyParams(bodyParams, mergedParams);
+                CopyParams(queryParams, mergedParams);
+            }
+            else if (precedence == ParameterPrecedence.QueryString)
+            {
+                // Body params first, then query params override
+                CopyParams(bodyParams, mergedParams);
+                CopyParams(queryParams, mergedParams);
+            }
+            else // ParameterPrecedence.Body
+            {
+                // Query params first, then body params override
+                CopyParams(queryParams, mergedParams);
+                CopyParams(bodyParams, mergedParams);
+            }
+
+            return mergedParams;
+        }
+
+        private static void CopyParams(JsonObject source, JsonObject destination)
+        {
+            if (source == null) return;
+
+            foreach (var param in source)
+            {
+                destination[param.Key] = param.Value?.DeepClone();
+            }
         }
 
         private static async Task<string> GetRequestFromBodyAsync()
