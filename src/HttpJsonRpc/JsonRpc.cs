@@ -424,19 +424,39 @@ namespace HttpJsonRpc
 
         private static string MergeRequestJson(string queryStringJson, string bodyJson, ParameterPrecedence precedence)
         {
-            var queryObject = JsonNode.Parse(queryStringJson) as JsonObject;
-            var bodyObject = JsonNode.Parse(bodyJson) as JsonObject;
+            JsonObject queryObject;
+            JsonObject bodyObject;
+
+            try
+            {
+                queryObject = JsonNode.Parse(queryStringJson) as JsonObject;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Failed to parse query string JSON for merging: {ex.Message}", ex);
+            }
+
+            try
+            {
+                bodyObject = JsonNode.Parse(bodyJson) as JsonObject;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Failed to parse body JSON for merging: {ex.Message}", ex);
+            }
 
             if (queryObject == null || bodyObject == null)
             {
-                throw new Exception("Failed to parse request JSON for merging.");
+                throw new Exception("Failed to parse request JSON for merging (parsed to null).");
             }
 
             // Start with body as base (we'll merge query into it or vice versa)
             var mergedObject = new JsonObject();
 
             // Merge top-level properties (jsonrpc, id, method, version, etc.)
-            // Priority: query string values override body values for top-level properties
+            // Note: For top-level properties, query string values always override body values
+            // This is intentional as these properties define the request itself (method, id, etc.)
+            // The ParameterPrecedence setting only affects the 'params' object
             foreach (var prop in bodyObject)
             {
                 if (prop.Key != "params")
@@ -458,88 +478,60 @@ namespace HttpJsonRpc
             var queryParams = queryObject["params"] as JsonObject;
             var bodyParams = bodyObject["params"] as JsonObject;
 
+            var mergedParams = MergeParams(queryParams, bodyParams, precedence);
+
+            mergedObject["params"] = mergedParams;
+
+            return mergedObject.ToString();
+        }
+
+        private static JsonObject MergeParams(JsonObject queryParams, JsonObject bodyParams, ParameterPrecedence precedence)
+        {
             var mergedParams = new JsonObject();
 
             if (precedence == ParameterPrecedence.Strict)
             {
                 // In strict mode, check for duplicate parameters
-                var duplicates = new List<string>();
-
                 if (queryParams != null && bodyParams != null)
                 {
-                    foreach (var key in queryParams)
-                    {
-                        if (bodyParams.ContainsKey(key.Key))
-                        {
-                            duplicates.Add(key.Key);
-                        }
-                    }
-                }
+                    var duplicates = queryParams.Select(p => p.Key)
+                        .Intersect(bodyParams.Select(p => p.Key))
+                        .ToList();
 
-                if (duplicates.Any())
-                {
-                    throw new Exception($"Duplicate parameters found in both query string and body (Strict mode): {string.Join(", ", duplicates)}");
+                    if (duplicates.Any())
+                    {
+                        throw new Exception($"Duplicate parameters found in both query string and body (Strict mode): {string.Join(", ", duplicates)}");
+                    }
                 }
 
                 // No duplicates, merge all parameters
-                if (bodyParams != null)
-                {
-                    foreach (var param in bodyParams)
-                    {
-                        mergedParams[param.Key] = param.Value?.DeepClone();
-                    }
-                }
-
-                if (queryParams != null)
-                {
-                    foreach (var param in queryParams)
-                    {
-                        mergedParams[param.Key] = param.Value?.DeepClone();
-                    }
-                }
+                CopyParams(bodyParams, mergedParams);
+                CopyParams(queryParams, mergedParams);
             }
             else if (precedence == ParameterPrecedence.QueryString)
             {
                 // Body params first, then query params override
-                if (bodyParams != null)
-                {
-                    foreach (var param in bodyParams)
-                    {
-                        mergedParams[param.Key] = param.Value?.DeepClone();
-                    }
-                }
-
-                if (queryParams != null)
-                {
-                    foreach (var param in queryParams)
-                    {
-                        mergedParams[param.Key] = param.Value?.DeepClone();
-                    }
-                }
+                CopyParams(bodyParams, mergedParams);
+                CopyParams(queryParams, mergedParams);
             }
             else // ParameterPrecedence.Body
             {
                 // Query params first, then body params override
-                if (queryParams != null)
-                {
-                    foreach (var param in queryParams)
-                    {
-                        mergedParams[param.Key] = param.Value?.DeepClone();
-                    }
-                }
-
-                if (bodyParams != null)
-                {
-                    foreach (var param in bodyParams)
-                    {
-                        mergedParams[param.Key] = param.Value?.DeepClone();
-                    }
-                }
+                CopyParams(queryParams, mergedParams);
+                CopyParams(bodyParams, mergedParams);
             }
 
-            mergedObject["params"] = mergedParams;
+            return mergedParams;
+        }
 
-            return mergedObject.ToString();
+        private static void CopyParams(JsonObject source, JsonObject destination)
+        {
+            if (source == null) return;
+
+            foreach (var param in source)
+            {
+                destination[param.Key] = param.Value?.DeepClone();
+            }
         }
 
         private static async Task<string> GetRequestFromBodyAsync()
