@@ -9,6 +9,13 @@ using System.Text.Json.Serialization;
 
 namespace HttpJsonRpc
 {
+    public enum ParameterPrecedence
+    {
+        QueryString,  // Default - query params override body params
+        Body,         // Body params override query params
+        Strict        // Throw error if same param in both places
+    }
+
     public class JsonRpcOptions
     {
         public OpenRpcOptions OpenRpc { get; } = new OpenRpcOptions();
@@ -30,5 +37,6 @@ namespace HttpJsonRpc
         public Action<KestrelServerOptions> ServerOptions { get; set; } = (o) => o.Listen(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5000));
         public Action<CorsPolicyBuilder> CorsPolicy { get; set; }
         public bool IncludeStackTraceInErrors { get; set; } = true;
+        public ParameterPrecedence ParameterMergePrecedence { get; set; } = ParameterPrecedence.QueryString;
     }
 }

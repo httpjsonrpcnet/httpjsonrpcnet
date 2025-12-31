@@ -376,32 +376,170 @@ namespace HttpJsonRpc
         private static async Task SetContextRequestJsonAsync(JsonRpcContext context)
         {
             string requestJson = null;
-            if (context.HttpContext.Request.QueryString.HasValue)
+            bool hasQueryString = context.HttpContext.Request.QueryString.HasValue;
+            string queryStringJson = null;
+            string bodyJson = null;
+
+            // Get query string parameters if available
+            if (hasQueryString)
             {
-                requestJson = GetRequestFromQueryString();
+                queryStringJson = GetRequestFromQueryString();
             }
-            else
+
+            // Get body content if available
+            var contentType = context.HttpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
+            if (contentType != null)
             {
-                var contentType = context.HttpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
-                if (contentType != null)
+                switch (contentType)
                 {
-                    switch (contentType)
-                    {
-                        case "application/json":
-                            requestJson = await GetRequestFromBodyAsync();
-                            break;
-                        case "multipart/form-data":
-                            requestJson = await GetRequestFromFormAsync();
-                            break;
-                        default:
-                            throw new Exception($"{contentType} is not a supported content-type.");
-                    }
+                    case "application/json":
+                        bodyJson = await GetRequestFromBodyAsync();
+                        break;
+                    case "multipart/form-data":
+                        bodyJson = await GetRequestFromFormAsync();
+                        break;
+                    default:
+                        throw new Exception($"{contentType} is not a supported content-type.");
                 }
+            }
+
+            // Merge parameters from both sources if both exist
+            if (!string.IsNullOrWhiteSpace(queryStringJson) && !string.IsNullOrWhiteSpace(bodyJson))
+            {
+                requestJson = MergeRequestJson(queryStringJson, bodyJson, Options.ParameterMergePrecedence);
+            }
+            else if (!string.IsNullOrWhiteSpace(queryStringJson))
+            {
+                requestJson = queryStringJson;
+            }
+            else if (!string.IsNullOrWhiteSpace(bodyJson))
+            {
+                requestJson = bodyJson;
             }
 
             if (string.IsNullOrWhiteSpace(requestJson)) throw new Exception($"Request is empty.");
 
             context.RequestJson = requestJson;
+        }
+
+        private static string MergeRequestJson(string queryStringJson, string bodyJson, ParameterPrecedence precedence)
+        {
+            var queryObject = JsonNode.Parse(queryStringJson) as JsonObject;
+            var bodyObject = JsonNode.Parse(bodyJson) as JsonObject;
+
+            if (queryObject == null || bodyObject == null)
+            {
+                throw new Exception("Failed to parse request JSON for merging.");
+            }
+
+            // Start with body as base (we'll merge query into it or vice versa)
+            var mergedObject = new JsonObject();
+
+            // Merge top-level properties (jsonrpc, id, method, version, etc.)
+            // Priority: query string values override body values for top-level properties
+            foreach (var prop in bodyObject)
+            {
+                if (prop.Key != "params")
+                {
+                    mergedObject[prop.Key] = prop.Value?.DeepClone();
+                }
+            }
+
+            foreach (var prop in queryObject)
+            {
+                if (prop.Key != "params")
+                {
+                    // Query string values override body values for top-level properties
+                    mergedObject[prop.Key] = prop.Value?.DeepClone();
+                }
+            }
+
+            // Merge params based on precedence strategy
+            var queryParams = queryObject["params"] as JsonObject;
+            var bodyParams = bodyObject["params"] as JsonObject;
+
+            var mergedParams = new JsonObject();
+
+            if (precedence == ParameterPrecedence.Strict)
+            {
+                // In strict mode, check for duplicate parameters
+                var duplicates = new List<string>();
+
+                if (queryParams != null && bodyParams != null)
+                {
+                    foreach (var key in queryParams)
+                    {
+                        if (bodyParams.ContainsKey(key.Key))
+                        {
+                            duplicates.Add(key.Key);
+                        }
+                    }
+                }
+
+                if (duplicates.Any())
+                {
+                    throw new Exception($"Duplicate parameters found in both query string and body (Strict mode): {string.Join(", ", duplicates)}");
+                }
+
+                // No duplicates, merge all parameters
+                if (bodyParams != null)
+                {
+                    foreach (var param in bodyParams)
+                    {
+                        mergedParams[param.Key] = param.Value?.DeepClone();
+                    }
+                }
+
+                if (queryParams != null)
+                {
+                    foreach (var param in queryParams)
+                    {
+                        mergedParams[param.Key] = param.Value?.DeepClone();
+                    }
+                }
+            }
+            else if (precedence == ParameterPrecedence.QueryString)
+            {
+                // Body params first, then query params override
+                if (bodyParams != null)
+                {
+                    foreach (var param in bodyParams)
+                    {
+                        mergedParams[param.Key] = param.Value?.DeepClone();
+                    }
+                }
+
+                if (queryParams != null)
+                {
+                    foreach (var param in queryParams)
+                    {
+                        mergedParams[param.Key] = param.Value?.DeepClone();
+                    }
+                }
+            }
+            else // ParameterPrecedence.Body
+            {
+                // Query params first, then body params override
+                if (queryParams != null)
+                {
+                    foreach (var param in queryParams)
+                    {
+                        mergedParams[param.Key] = param.Value?.DeepClone();
+                    }
+                }
+
+                if (bodyParams != null)
+                {
+                    foreach (var param in bodyParams)
+                    {
+                        mergedParams[param.Key] = param.Value?.DeepClone();
+                    }
+                }
+            }
+
+            mergedObject["params"] = mergedParams;
+
+            return mergedObject.ToString();
         }
 
         private static async Task<string> GetRequestFromBodyAsync()
