@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using Microsoft.AspNetCore.Http;
 
@@ -15,7 +16,7 @@ namespace HttpJsonRpc
         }
 
         public HttpContext HttpContext { get; set; }
-        public string RequestJson { get; set; }
+        public JsonObject RequestJson { get; set; }
         public JsonRpcRequest Request { get; set; }
         public JsonRpcMethod Method { get; set; }
         public object ClassInstance { get; set; }

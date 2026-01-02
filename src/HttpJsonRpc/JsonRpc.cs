@@ -375,57 +375,51 @@ namespace HttpJsonRpc
 
         private static async Task SetContextRequestJsonAsync(JsonRpcContext context)
         {
-            string requestJson = null;
-            if (context.HttpContext.Request.QueryString.HasValue)
+            JsonObject request = null;
+
+            var contentType = context.HttpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
+            if (contentType != null)
             {
-                requestJson = GetRequestFromQueryString();
+                switch (contentType)
+                {
+                    case "application/json":
+                        request = await GetRequestFromBodyAsync(context);
+                        break;
+                    case "multipart/form-data":
+                        request = await GetRequestFromFormAsync(context);
+                        break;
+                    default:
+                        throw new Exception($"{contentType} is not a supported content-type.");
+                }
             }
             else
             {
-                var contentType = context.HttpContext.Request.ContentType?.ToLowerInvariant().Split(';')[0];
-                if (contentType != null)
-                {
-                    switch (contentType)
-                    {
-                        case "application/json":
-                            requestJson = await GetRequestFromBodyAsync();
-                            break;
-                        case "multipart/form-data":
-                            requestJson = await GetRequestFromFormAsync();
-                            break;
-                        default:
-                            throw new Exception($"{contentType} is not a supported content-type.");
-                    }
-                }
+                request = new JsonObject();
             }
 
-            if (string.IsNullOrWhiteSpace(requestJson)) throw new Exception($"Request is empty.");
-
-            context.RequestJson = requestJson;
-        }
-
-        private static async Task<string> GetRequestFromBodyAsync()
-        {
-            var httpContext = JsonRpcContext.Current.HttpContext;
-
-            string jsonRequest;
-            using (var reader = new StreamReader(httpContext.Request.Body))
+            if (context.HttpContext.Request.QueryString.HasValue)
             {
-                jsonRequest = await reader.ReadToEndAsync();
+                PopulateRequestFromQueryString(context, request);
             }
 
-            return jsonRequest;
+            context.RequestJson = request;
         }
 
-        private static string GetRequestFromQueryString()
+        private static async Task<JsonObject> GetRequestFromBodyAsync(JsonRpcContext context)
         {
-            var httpContext = JsonRpcContext.Current.HttpContext;
+            return await JsonSerializer.DeserializeAsync<JsonObject>(context.HttpContext.Request.Body);
+        }
 
-            var jRequest = new JsonObject();
-            var parameters = new JsonObject();
-            jRequest["params"] = parameters;
+        private static void PopulateRequestFromQueryString(JsonRpcContext context, JsonObject request)
+        {
+            var parameters = request["params"] as JsonObject;
+            if (parameters is null)
+            { 
+                parameters = new JsonObject();
+                request["params"] = parameters;
+            }
 
-            var queryString = httpContext.Request.Query;
+            var queryString = context.HttpContext.Request.Query;
             foreach (var key in queryString.Keys)
             {
                 if (key == null) continue; ;
@@ -433,7 +427,7 @@ namespace HttpJsonRpc
 
                 if (key == "jsonrpc" || key == "id" || key == "method" || key == "version")
                 {
-                    jRequest[key] = value.FirstOrDefault();
+                    request[key] = value.FirstOrDefault();
                     continue;
                 }
 
@@ -441,8 +435,8 @@ namespace HttpJsonRpc
             }
 
             //Move unknown values into ExtensionData
-            var methodName = jRequest["method"]?.ToString();
-            var version = jRequest["version"]?.ToString() ?? "";
+            var methodName = request["method"]?.ToString();
+            var version = request["version"]?.ToString() ?? "";
             var rpcMethod = GetMethod(methodName, version);
 
             if (rpcMethod != null)
@@ -459,20 +453,14 @@ namespace HttpJsonRpc
                 foreach (var kvp in extensionData)
                 {
                     parameters.Remove(kvp.Key);
-                    jRequest[kvp.Key] = kvp.Value;
+                    request[kvp.Key] = kvp.Value;
                 }
             }
-
-            return jRequest.ToString();
         }
 
-        private static async Task<string> GetRequestFromFormAsync()
+        private static async Task<JsonObject> GetRequestFromFormAsync(JsonRpcContext context)
         {
-            var httpContext = JsonRpcContext.Current.HttpContext;
-
-            var jsonRequest = string.Empty;
-
-            using (var reader = new StreamReader(httpContext.Request.Body))
+            using (var reader = new StreamReader(context.HttpContext.Request.Body))
             {
                 var boundary = await reader.ReadLineAsync();
                 var multipartString = await reader.ReadToEndAsync();
@@ -482,11 +470,12 @@ namespace HttpJsonRpc
 
                 if (requestPart != null)
                 {
-                    jsonRequest = requestPart.Substring(requestPartHeader.Length).Trim();
+                    var json = requestPart.Substring(requestPartHeader.Length).Trim();
+                    return JsonSerializer.Deserialize<JsonObject>(json);
                 }
             }
 
-            return jsonRequest;
+            throw new ArgumentException("Failed to parse JSON request from form data.");
         }
 
         private static void SetContextRequest(JsonRpcContext context)
