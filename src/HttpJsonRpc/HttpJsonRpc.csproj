@@ -2,10 +2,10 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <Version>2.5.5</Version>
+    <Version>2.5.6</Version>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <AssemblyVersion>2.5.5</AssemblyVersion>
-    <FileVersion>2.5.5</FileVersion>
+    <AssemblyVersion>2.5.6</AssemblyVersion>
+    <FileVersion>2.5.6</FileVersion>
     <PackageProjectUrl>https://github.com/httpjsonrpcnet/httpjsonrpcnet</PackageProjectUrl>
     <RepositoryUrl>https://github.com/httpjsonrpcnet/httpjsonrpcnet</RepositoryUrl>
     <PackageLicenseUrl></PackageLicenseUrl>
