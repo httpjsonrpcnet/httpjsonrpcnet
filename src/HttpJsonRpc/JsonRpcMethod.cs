@@ -74,7 +74,7 @@ namespace HttpJsonRpc
                     .Select(p =>
                     {
                         var attrib = p.GetCustomAttribute<JsonRpcParameterAttribute>();
-                        return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", p.PropertyType, !p.IsDefined(typeof(RequiredAttribute)));
+                        return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", p.PropertyType, !p.IsDefined(typeof(RequiredAttribute)) && !p.IsDefined(typeof(JsonRequiredAttribute)));
                     }).ToImmutableArray();
             }
         }
