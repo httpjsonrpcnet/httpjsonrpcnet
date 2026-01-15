@@ -388,11 +388,10 @@ namespace HttpJsonRpc
                     case "multipart/form-data":
                         request = await GetRequestFromFormAsync(context);
                         break;
-                    default:
-                        throw new Exception($"{contentType} is not a supported content-type.");
                 }
             }
-            else
+            
+            if (request is null)
             {
                 request = new JsonObject();
             }
@@ -656,7 +655,7 @@ namespace HttpJsonRpc
 
                 httpContext.Response.ContentType = "application/json";
 
-                var serializerOptions = (JsonSerializerOptions)context.Method.ParentClass.GetSerializerOptionsMethod
+                var serializerOptions = (JsonSerializerOptions)context.Method?.ParentClass.GetSerializerOptionsMethod
                     ?.Invoke(context.ClassInstance, new object[] { context, SerializerOptions })
                     ?? SerializerOptions;
 
