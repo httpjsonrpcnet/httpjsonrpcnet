@@ -28,11 +28,10 @@ namespace HttpJsonRpc
 
             if (!type.IsGenericType) return type.Name;
 
-            var parts = new List<string>
-            {
-                type.Name.Substring(0, type.Name.IndexOf('`'))
-            };
+            var backtickIndex = type.Name.IndexOf('`');
+            var baseName = backtickIndex >= 0 ? type.Name.Substring(0, backtickIndex) : type.Name;
 
+            var parts = new List<string> { baseName };
             parts.AddRange(type.GetGenericArguments().Select(GetName));
 
             return string.Join("_", parts);
