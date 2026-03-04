@@ -52,7 +52,7 @@ namespace HttpJsonRpc
         private Dictionary<string, OpenRpcSchema> GetProperties(Type type)
         {
             var properties = new Dictionary<string, OpenRpcSchema>();
-            foreach (var prop in type.GetProperties())
+            foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
                 var ignoreAttribute = prop.GetCustomAttribute<JsonIgnoreAttribute>();
                 if (ignoreAttribute != null && ignoreAttribute.Condition == JsonIgnoreCondition.Always)
