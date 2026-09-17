@@ -220,6 +220,8 @@ namespace HttpJsonRpc
                 .UseKestrel(ServerOptions)
                 .Configure(app =>
                 {
+                    Options.ConfigureApplication?.Invoke(app);
+
                     if (CorsPolicy != null)
                     {
                         app.UseCors(CorsPolicy);

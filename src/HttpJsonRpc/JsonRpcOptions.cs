@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -29,6 +30,11 @@ namespace HttpJsonRpc
         };
         public Action<KestrelServerOptions> ServerOptions { get; set; } = (o) => o.Listen(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5000));
         public Action<CorsPolicyBuilder> CorsPolicy { get; set; }
+        /// <summary>
+        /// Configures application middleware before CORS and the JSON-RPC request handler.
+        /// Set this callback before calling JsonRpc.Start.
+        /// </summary>
+        public Action<IApplicationBuilder> ConfigureApplication { get; set; }
         public bool IncludeStackTraceInErrors { get; set; } = true;
     }
 }
