@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace HttpJsonRpc
 {
@@ -7,7 +9,8 @@ namespace HttpJsonRpc
     {
         public bool CanConvert(OpenRpcSchemaGenerator generator, Type type)
         {
-            return typeof(IDictionary).IsAssignableFrom(type);
+            return typeof(IDictionary).IsAssignableFrom(type) && !type.GetInterfaces().Any(i =>
+                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>));
         }
 
         public OpenRpcTypeInfo Convert(OpenRpcSchemaGenerator generator, OpenRpcTypeInfo info)

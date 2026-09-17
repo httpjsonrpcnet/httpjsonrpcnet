@@ -43,12 +43,16 @@ namespace HttpJsonRpc
             Types.Add(typeof(TimeSpan), "string");
             Types.Add(typeof(TimeSpan?), "string");
             Types.Add(typeof(string), "string");
+            Types.Add(typeof(Guid), "string");
+            Types.Add(typeof(byte[]), "string");
             Types.Add(typeof(void), null);
         }
 
         public static string GetJsonType(Type type)
         {
             if (type == null) throw new ArgumentNullException(nameof(type));
+            type = Nullable.GetUnderlyingType(type) ?? type;
+            if (type.IsEnum) return "integer";
 
             if (Types.TryGetValue(type, out var jsonType))
             {

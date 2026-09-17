@@ -29,11 +29,12 @@ namespace HttpJsonRpc
             {
                 var method = new OpenRpcMethod
                 {
-                    Name = $"{m.ParentClass.Name.ToLowerFirstChar()}.{m.Name.ToLowerFirstChar()}",
+                    Name = m.FullName,
+                    Version = m.ParentClass.Version,
                     Description = m.Description,
                     Params = m.Parameters.Select(p => new OpenRpcContentDescriptor
                     {
-                        Name = p.Name.ToLowerFirstChar(),
+                        Name = p.Name,
                         Description = p.Description,
                         Required = !p.Optional,
                         Schema = schemaGenerator.GetSchema(p.ClrType)

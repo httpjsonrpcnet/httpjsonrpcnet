@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
     <Version>2.6.4</Version>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <AssemblyVersion>2.6.4</AssemblyVersion>
@@ -18,11 +19,15 @@
 
   <ItemGroup>
     <PackageReference Include="CommonServiceLocator" Version="2.0.7" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.7" />
+    <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
+    <InternalsVisibleTo Include="HttpJsonRpc.Tests" />
     <PackageReference Include="Microsoft.AspNetCore.Cors" Version="2.3.0" />
     <PackageReference Include="Microsoft.AspNetCore.Server.Kestrel" Version="2.3.13" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.7" />
     <PackageReference Include="System.Text.Json" Version="9.0.7" />
     <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+    <None Include="..\..\CHANGELOG.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

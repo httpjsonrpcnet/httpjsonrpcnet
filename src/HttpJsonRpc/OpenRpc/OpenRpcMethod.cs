@@ -3,6 +3,8 @@
     public class OpenRpcMethod
     {
         public string Name { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("x-version")]
+        public string Version { get; set; }
         public object[] Tags { get; set; }
         public string Summary { get; set; }
         public string Description { get; set; }

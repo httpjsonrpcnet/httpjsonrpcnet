@@ -24,6 +24,11 @@ namespace HttpJsonRpc
 
         public OpenRpcSchema Items { get; set; }
         public Dictionary<string, OpenRpcSchema> Properties { get; set; }
+        public string Format { get; set; }
+        public object[] Enum { get; set; }
+        public string[] Required { get; set; }
+        public OpenRpcSchema AdditionalProperties { get; set; }
+        public OpenRpcSchema[] AnyOf { get; set; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public bool Nullable { get; set; }

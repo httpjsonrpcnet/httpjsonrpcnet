@@ -4,6 +4,8 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json.Serialization;
+using System.Threading;
+using System.Runtime.CompilerServices;
 
 namespace HttpJsonRpc
 {
@@ -42,21 +44,24 @@ namespace HttpJsonRpc
             var attribute = _MethodInfo.GetCustomAttribute<JsonRpcMethodAttribute>();
 
             _Name = attribute.Name ?? _MethodInfo.Name.ToLowerFirstChar();
-            var asyncIndex = _Name.LastIndexOf("Async", StringComparison.Ordinal);
-            if (asyncIndex > -1)
+            if (attribute.Name == null && _Name.EndsWith("Async", StringComparison.Ordinal))
             {
-                _Name = _Name.Remove(asyncIndex);
+                _Name = _Name.Substring(0, _Name.Length - 5);
             }
             _FullName = $"{_ParentClass.Name}.{_Name}";
 
             _Description = attribute.Description;
 
             var paramaterInfos = _MethodInfo.GetParameters();
+            if (info.ContainsGenericParameters || info.ReturnType.IsByRef || info.ReturnType.IsPointer ||
+                paramaterInfos.Any(p => p.ParameterType.IsByRef || p.ParameterType.IsPointer) ||
+                (info.ReturnType == typeof(void) && info.IsDefined(typeof(AsyncStateMachineAttribute))))
+                throw new InvalidOperationException($"Unsupported RPC signature: {info.DeclaringType.FullName}.{info.Name}");
             _ParamsType = paramaterInfos.Where(i => i.IsDefined(typeof(JsonRpcParamsAttribute))).FirstOrDefault()?.ParameterType;
 
             if (_ParamsType is null)
             {
-                _Parameters = paramaterInfos.Select(p =>
+                _Parameters = paramaterInfos.Where(p => p.ParameterType != typeof(CancellationToken) && p.GetCustomAttribute<JsonRpcParameterAttribute>()?.Ignore != true).Select(p =>
                 {
                     var attrib = p.GetCustomAttribute<JsonRpcParameterAttribute>();
                     return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", p.ParameterType, p.IsOptional);
@@ -70,11 +75,15 @@ namespace HttpJsonRpc
                 }
 
                 _Parameters = _ParamsType.GetProperties(BindingFlags.Instance | BindingFlags.Public)
-                    .Where(p => p.CanWrite)
+                    .Where(p => p.SetMethod?.IsPublic == true && p.GetIndexParameters().Length == 0 &&
+                        p.GetCustomAttribute<JsonIgnoreAttribute>()?.Condition != JsonIgnoreCondition.Always &&
+                        p.GetCustomAttribute<JsonRpcParameterAttribute>()?.Ignore != true)
                     .Select(p =>
                     {
                         var attrib = p.GetCustomAttribute<JsonRpcParameterAttribute>();
-                        return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", p.PropertyType, !p.IsRequired());
+                        var name = p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ??
+                            JsonRpc.SerializerOptions.PropertyNamingPolicy?.ConvertName(p.Name) ?? p.Name;
+                        return new JsonRpcParameter(name, attrib?.Description ?? "", p.PropertyType, !p.IsRequired());
                     }).ToImmutableArray();
             }
         }

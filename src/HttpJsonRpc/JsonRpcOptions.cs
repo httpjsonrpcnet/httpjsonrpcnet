@@ -35,6 +35,10 @@ namespace HttpJsonRpc
         /// Set this callback before calling JsonRpc.Start.
         /// </summary>
         public Action<IApplicationBuilder> ConfigureApplication { get; set; }
-        public bool IncludeStackTraceInErrors { get; set; } = true;
+        public bool IncludeStackTraceInErrors { get; set; } = false;
+        public bool IncludeExceptionMessagesInErrors { get; set; } = false;
+        /// <summary>Validate JSON-RPC 2.0 requests and suppress notification responses. Legacy HTTP conveniences remain the default.</summary>
+        public bool StrictProtocol { get; set; } = false;
+        public int MaxBatchSize { get; set; } = 100;
     }
 }

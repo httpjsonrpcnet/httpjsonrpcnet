@@ -39,6 +39,7 @@ namespace HttpJsonRpc
             _ClassType = type;
 
             var classAttribute = _ClassType.GetCustomAttribute<JsonRpcClassAttribute>();
+            if (classAttribute == null) throw new ArgumentException("RPC classes require JsonRpcClassAttribute.", nameof(type));
             _Name = classAttribute.Name ?? type.Name.ToLowerFirstChar();
             _Version = classAttribute.Version;
             _Key = (string.IsNullOrWhiteSpace(_Version) ? _Name : $"{_Version}:{_Name}").ToLowerInvariant();

@@ -14,7 +14,12 @@ namespace HttpJsonRpc
 
         public virtual JsonRpcError CreateError(CreateErrorArgs args)
         {
-            return JsonRpcError.Create(args.ErrorCode, args.Exception, args.Options.IncludeStackTraceInErrors);
+            var error = JsonRpcError.Create(args.ErrorCode);
+            if (args.Options.IncludeExceptionMessagesInErrors)
+                error.Message = args.Exception?.Message ?? error.Message;
+            if (args.Options.IncludeStackTraceInErrors)
+                error.Data = new JsonRpcExceptionData { StackTrace = args.Exception?.StackTrace };
+            return error;
         }
     }
 }
