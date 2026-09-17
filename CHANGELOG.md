@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (planned 2.7.0)
+## 2.7.0 - 2026-09-17
 
 ### Fixed
 - Explicit request rejection now prevents RPC execution, including empty HTTP error responses.
