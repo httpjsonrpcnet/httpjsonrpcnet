@@ -117,6 +117,38 @@ namespace HttpJsonRpc.Tests
             g.GetSchema(typeof(Dictionary<string, Guid>));
             Assert.That(g.Schemas[g.GetName(typeof(Dictionary<string, Guid>))].AdditionalProperties.Type, Is.EqualTo("string"));
         }
+        [Test]
+        public void GenericSchemaIdentityPreservesNullableArguments()
+        {
+            var g = new OpenRpcSchemaGenerator(new JsonRpcOptions());
+            var plain = g.GetSchema(typeof(Comparison<Guid>));
+            var nullable = g.GetSchema(typeof(Comparison<Guid?>));
+            Assert.That(plain.Ref, Is.Not.EqualTo(nullable.Ref));
+            Assert.That(g.Schemas[g.GetName(typeof(Comparison<Guid>))].Properties["value"].Type, Is.EqualTo("string"));
+            Assert.That((string[])g.Schemas[g.GetName(typeof(Comparison<Guid?>))].Properties["value"].Type, Does.Contain("null"));
+        }
+        [Test]
+        public void ShadowedPropertyMatchesSerializedContract()
+        {
+            var options = new JsonRpcOptions();
+            var g = new OpenRpcSchemaGenerator(options);
+            g.GetSchema(typeof(DerivedItem));
+            var properties = g.Schemas[g.GetName(typeof(DerivedItem))].Properties;
+            var json = JsonSerializer.SerializeToElement(new DerivedItem { Group = 42 }, options.SerializerOptions);
+            Assert.That(properties.Count, Is.EqualTo(1));
+            Assert.That(properties["group"].Type, Is.EqualTo("integer"));
+            Assert.That(json.GetProperty("group").GetInt32(), Is.EqualTo(42));
+        }
+        [Test]
+        public void UnrelatedJsonNameCollisionIsRejected()
+        {
+            var g = new OpenRpcSchemaGenerator(new JsonRpcOptions());
+            Assert.Throws<InvalidOperationException>(() => g.GetSchema(typeof(CollidingNames)));
+        }
+        public class Comparison<T> { public T Value { get; set; } }
+        public class BaseItem { public string Group { get; set; } }
+        public class DerivedItem : BaseItem { public new int Group { get; set; } }
+        public class CollidingNames { [JsonPropertyName("same")] public int First { get; set; } [JsonPropertyName("same")] public int Second { get; set; } }
         public class Contract { [JsonPropertyName("UPPER_NAME"), JsonRequired] public string Name { get; set; } [JsonIgnore] public string Hidden { get; set; } public string this[int index] => "x"; }
         public class Recursive { public Recursive Next { get; set; } }
         public class RecursiveList : List<RecursiveList> { }

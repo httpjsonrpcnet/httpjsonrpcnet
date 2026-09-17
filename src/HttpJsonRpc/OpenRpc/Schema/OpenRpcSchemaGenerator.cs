@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.RegularExpressions;
 
 namespace HttpJsonRpc
@@ -20,9 +21,14 @@ namespace HttpJsonRpc
         {
             var converter = Options.OpenRpc.TypeConverters.FirstOrDefault(c => c.CanConvert(this, type));
             if (converter != null) return converter.GetName(this, type);
+            return GetTypeIdentity(type);
+        }
+        private static string GetTypeIdentity(Type type)
+        {
+            if (type.IsArray) return GetTypeIdentity(type.GetElementType()) + "_Array" + type.GetArrayRank();
             var name = type.IsGenericType ? type.GetGenericTypeDefinition().FullName : type.FullName;
             name = Regex.Replace(name ?? type.Name, @"`\d+", "");
-            if (type.IsGenericType) name += "_" + string.Join("_", type.GetGenericArguments().Select(GetName));
+            if (type.IsGenericType) name += "_" + string.Join("_", type.GetGenericArguments().Select(GetTypeIdentity));
             return Regex.Replace(name, @"[^a-zA-Z0-9_.-]", "_");
         }
         public OpenRpcTypeInfo GetTypeInfo(OpenRpcTypeInfo info) => Options.OpenRpc.TypeConverters
@@ -80,27 +86,25 @@ namespace HttpJsonRpc
                     schema.AddType("object");
                     schema.Properties = new Dictionary<string, OpenRpcSchema>();
                     var required = new List<string>();
-                    foreach (var prop in actual.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                    // Let System.Text.Json resolve inheritance, shadowing, naming, and field inclusion.
+                    // Custom wire shapes still require an OpenRPC converter; here we describe the
+                    // default object contract rather than attempting to infer converter output.
+                    var contractOptions = new JsonSerializerOptions(Options.SerializerOptions);
+                    contractOptions.Converters.Clear();
+                    var contract = new DefaultJsonTypeInfoResolver().GetTypeInfo(actual, contractOptions);
+                    foreach (var property in contract.Properties)
                     {
-                        if (prop.GetIndexParameters().Length != 0 || prop.GetMethod?.IsPublic != true) continue;
-                        if (prop.GetCustomAttribute<JsonIgnoreAttribute>()?.Condition == JsonIgnoreCondition.Always) continue;
-                        if (Options.SerializerOptions.IgnoreReadOnlyProperties && prop.SetMethod == null) continue;
-                        var explicitName = prop.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name;
-                        var propertyName = explicitName ?? Options.SerializerOptions.PropertyNamingPolicy?.ConvertName(prop.Name) ?? prop.Name;
-                        if (prop.IsDefined(typeof(JsonExtensionDataAttribute)))
+                        if (property.Get == null) continue;
+                        var member = property.AttributeProvider as MemberInfo;
+                        if (member is PropertyInfo prop && Options.SerializerOptions.IgnoreReadOnlyProperties && prop.SetMethod == null) continue;
+                        if (member is FieldInfo field && Options.SerializerOptions.IgnoreReadOnlyFields && field.IsInitOnly) continue;
+                        if (property.IsExtensionData)
                         {
                             schema.AdditionalProperties = new OpenRpcSchema();
                             continue;
                         }
-                        schema.Properties.Add(propertyName, GetSchema(prop.PropertyType));
-                        if (prop.IsRequired()) required.Add(propertyName);
-                    }
-                    foreach (var field in actual.GetFields(BindingFlags.Public | BindingFlags.Instance))
-                    {
-                        if (!Options.SerializerOptions.IncludeFields && !field.IsDefined(typeof(JsonIncludeAttribute))) continue;
-                        if (field.GetCustomAttribute<JsonIgnoreAttribute>()?.Condition == JsonIgnoreCondition.Always) continue;
-                        var fieldName = field.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? Options.SerializerOptions.PropertyNamingPolicy?.ConvertName(field.Name) ?? field.Name;
-                        schema.Properties.Add(fieldName, GetSchema(field.FieldType));
+                        schema.Properties.Add(property.Name, GetSchema(property.PropertyType));
+                        if (property.IsRequired || (member is PropertyInfo requiredProp && requiredProp.IsRequired())) required.Add(property.Name);
                     }
                     if (required.Count > 0) schema.Required = required.ToArray();
                 }

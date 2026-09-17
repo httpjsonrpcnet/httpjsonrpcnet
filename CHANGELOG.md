@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.1 - 2026-09-17
+
+- Preserve nullable and other CLR generic argument distinctions in OpenRPC component names.
+- Resolve shadowed properties through System.Text.Json contract metadata, matching the serialized property selection instead of throwing duplicate-key exceptions.
+- Add regressions for generic nullable arguments, inherited shadowed properties, and invalid JSON name collisions.
+
 ## 2.7.0 - 2026-09-17
 
 ### Fixed
