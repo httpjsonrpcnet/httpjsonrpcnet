@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Generate OpenRPC 1.4.1 documents and validate against the pinned official 1.4 schema.
+- Breaking: rename OpenRpcComponents.ExamplePairingObjects to ExamplePairings, matching the standard JSON field.
+- Breaking: remove OpenRpcTag.Summary; use Description for tag documentation.
+- Add compatibility coverage for populated metadata and incompatible document versions.
+
 ## 2.7.1 - 2026-09-17
 
 - Preserve nullable and other CLR generic argument distinctions in OpenRPC component names.

@@ -9,7 +9,7 @@ namespace HttpJsonRpc
         public Dictionary<string, OpenRpcExample> Examples { get; set; }
         public Dictionary<string, OpenRpcLink> Links { get; set; }
         public Dictionary<string, OpenRpcError> Errors { get; set; }
-        public Dictionary<string, OpenRpcExamplePairing> ExamplePairingObjects { get; set; }
+        public Dictionary<string, OpenRpcExamplePairing> ExamplePairings { get; set; }
         public Dictionary<string, OpenRpcTag> Tags { get; set; }
     }
 }

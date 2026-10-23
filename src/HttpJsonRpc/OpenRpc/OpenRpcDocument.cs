@@ -5,7 +5,7 @@ namespace HttpJsonRpc
     public class OpenRpcDocument
     {
         [JsonPropertyName("openrpc")]
-        public string OpenRpc { get; set; } = "1.3.0";
+        public string OpenRpc { get; set; } = "1.4.1";
         public OpenRpcInfo Info { get; set; }
         public OpenRpcServer[] Servers { get; set; }
         public OpenRpcMethod[] Methods { get; set; }

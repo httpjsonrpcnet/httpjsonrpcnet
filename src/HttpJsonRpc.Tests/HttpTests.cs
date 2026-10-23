@@ -80,9 +80,8 @@ namespace HttpJsonRpc.Tests
         public async Task DiscoveryValidatesAgainstOfficialMetaSchema()
         {
             var n = await Call(Request("rpc.discover"));
-            var schema = JsonSchema.FromFile(Path.Combine(TestContext.CurrentContext.TestDirectory, "Schemas", "openrpc.json"));
-            SchemaRegistry.RegisterNewSpecVersion(new Uri("https://meta.json-schema.tools/"), SpecVersion.Draft7);
-            SchemaRegistry.Global.Register(new Uri("https://meta.json-schema.tools/"), JsonSchema.FromFile(Path.Combine(TestContext.CurrentContext.TestDirectory, "Schemas", "json-schema.json")));
+            Assert.That(n["result"]["openrpc"].GetValue<string>(), Is.EqualTo("1.4.1"));
+            var schema = OpenRpcTestSchema.Value;
             var result = schema.Evaluate(n["result"], new EvaluationOptions { OutputFormat = OutputFormat.List });
             Assert.That(result.IsValid, Is.True, JsonSerializer.Serialize(result));
         }

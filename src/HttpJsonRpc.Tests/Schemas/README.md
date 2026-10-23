@@ -1,7 +1,15 @@
-# Test schema provenance
+# Validation fixtures
 
-- `openrpc.json`: official OpenRPC meta-schema release 1.14.9, from https://github.com/open-rpc/meta-schema/releases/download/1.14.9/open-rpc-meta-schema.json. Its accepted document versions include 1.3.0, which this library emits.
-- `json-schema.json`: https://meta.json-schema.tools/, downloaded 2026-09-17. Required by the OpenRPC meta-schema and registered locally as a Draft 7 dialect for validation.
-- `LICENSE.md`: Apache 2.0 license from open-rpc/meta-schema.
+`openrpc.json` is the unmodified OpenRPC 1.4 schema from the official
+`open-rpc/spec` v1.4.1 release:
 
-The files are vendored so tests do not require network access. Do not silently replace the validators with permissive stubs.
+https://raw.githubusercontent.com/open-rpc/spec/v1.4.1/spec/1.4/schema.json
+
+SHA-256: `a8a733cd87ef6ba2e1a38e6500090581b0f52b91051a0bad8386004366b11c56`
+
+`json-schema.json` was downloaded from https://meta.json-schema.tools/ on
+2026-09-17 and is retained unchanged. Tests register it explicitly;
+validation does not require downloading schemas at test time.
+
+`LICENSE.md` contains the Apache 2.0 license from open-rpc/meta-schema.
+Do not replace these validators with permissive stubs.
