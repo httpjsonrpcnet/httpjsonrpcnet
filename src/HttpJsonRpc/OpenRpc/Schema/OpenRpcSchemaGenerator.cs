@@ -15,7 +15,38 @@ namespace HttpJsonRpc
         public JsonRpcOptions Options { get; }
         public Dictionary<string, OpenRpcSchema> Schemas { get; } = new Dictionary<string, OpenRpcSchema>();
         private readonly Dictionary<string, Type> _SchemaTypes = new Dictionary<string, Type>();
-        public OpenRpcSchemaGenerator(JsonRpcOptions options) { Options = options; }
+        private readonly Action<OpenRpcSchemaTransformerContext>[] _SchemaTransformers;
+        private readonly Action<OpenRpcSchemaUsageTransformerContext>[] _UsageTransformers;
+        public OpenRpcSchemaGenerator(JsonRpcOptions options)
+        {
+            Options = options;
+            _SchemaTransformers = options.OpenRpc.SchemaTransformers.ToArray();
+            _UsageTransformers = options.OpenRpc.SchemaUsageTransformers.ToArray();
+        }
+
+        internal OpenRpcSchema GetUsageSchema(Type type, OpenRpcSchemaUsageKind kind,
+            Type containingType = null, string jsonName = null, MemberInfo member = null,
+            ParameterInfo parameter = null, JsonRpcMethod method = null)
+        {
+            var schema = GetSchema(type);
+            if (schema == null || _UsageTransformers.Length == 0) return schema;
+            schema = schema.Copy();
+            // Draft 7 ignores siblings of $ref. Each usage gets an independent wrapper.
+            if (schema.Ref != null) schema = new OpenRpcSchema { AllOf = new[] { schema } };
+            var context = new OpenRpcSchemaUsageTransformerContext(kind, type, schema, containingType, jsonName, member, parameter, method);
+            foreach (var transformer in _UsageTransformers)
+            {
+                transformer(context);
+                if (context.Schema == null) throw new InvalidOperationException("A schema usage transformer cannot remove its schema.");
+            }
+            return context.Schema;
+        }
+
+        private void TransformSchema(Type type, Type convertedType, string name, OpenRpcSchema schema)
+        {
+            var context = new OpenRpcSchemaTransformerContext(type, convertedType, name, schema);
+            foreach (var transformer in _SchemaTransformers) transformer(context);
+        }
 
         public string GetName(Type type)
         {
@@ -40,6 +71,7 @@ namespace HttpJsonRpc
             var actual = info.Type;
             if (actual == typeof(void)) return null;
             OpenRpcSchema schema;
+            var transformed = false;
             if (info.IsOpaque)
             {
                 schema = new OpenRpcSchema();
@@ -74,12 +106,12 @@ namespace HttpJsonRpc
                 if (dictionary != null)
                 {
                     schema.AddType("object");
-                    schema.AdditionalProperties = GetSchema(dictionary.GetGenericArguments()[1]);
+                    schema.AdditionalProperties = GetUsageSchema(dictionary.GetGenericArguments()[1], OpenRpcSchemaUsageKind.DictionaryValue, actual);
                 }
                 else if (typeof(IEnumerable).IsAssignableFrom(actual))
                 {
                     schema.AddType("array");
-                    schema.Items = GetSchema(actual.IsArray ? actual.GetElementType() : enumerable?.GetGenericArguments()[0] ?? typeof(object));
+                    schema.Items = GetUsageSchema(actual.IsArray ? actual.GetElementType() : enumerable?.GetGenericArguments()[0] ?? typeof(object), OpenRpcSchemaUsageKind.ArrayItem, actual);
                 }
                 else
                 {
@@ -103,13 +135,16 @@ namespace HttpJsonRpc
                             schema.AdditionalProperties = new OpenRpcSchema();
                             continue;
                         }
-                        schema.Properties.Add(property.Name, GetSchema(property.PropertyType));
+                        schema.Properties.Add(property.Name, GetUsageSchema(property.PropertyType, OpenRpcSchemaUsageKind.Property, actual, property.Name, member));
                         if (property.IsRequired || (member is PropertyInfo requiredProp && requiredProp.IsRequired())) required.Add(property.Name);
                     }
                     if (required.Count > 0) schema.Required = required.ToArray();
                 }
+                TransformSchema(type, actual, name, schema);
+                transformed = true;
                 if (info.CanRefence) schema = new OpenRpcSchema { Ref = "#/components/schemas/" + name };
             }
+            if (!transformed) TransformSchema(type, actual, null, schema);
             return Nullable(schema, info.Nullable);
         }
         private static Type GetGenericInterface(Type type, Type definition) =>

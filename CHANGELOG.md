@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add ordered schema, schema-usage, method, and document transformers for discovery customization.
+- Preserve parameter/property reflection metadata for documentation callbacks.
+- Isolate usage schemas and per-request document info; support `allOf` for local reference customization.
+- Add transformer ordering, recursion, isolation, filtering, and failure regression coverage.
+
 - Generate OpenRPC 1.4.1 documents and validate against the pinned official 1.4 schema.
 - Breaking: rename OpenRpcComponents.ExamplePairingObjects to ExamplePairings, matching the standard JSON field.
 - Breaking: remove OpenRpcTag.Summary; use Description for tag documentation.

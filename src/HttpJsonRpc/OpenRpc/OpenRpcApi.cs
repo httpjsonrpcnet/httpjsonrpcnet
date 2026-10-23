@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Linq;
+﻿using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -21,48 +20,7 @@ namespace HttpJsonRpc
                 .Where(m => options.OpenRpc.MethodFilters.All(f => f.Invoke(context, m)))
                 .ToArray();
 
-            var schemaGenerator = new OpenRpcSchemaGenerator(options);
-
-            var methods = new List<OpenRpcMethod>();
-
-            foreach (var m in rpcMethods)
-            {
-                var method = new OpenRpcMethod
-                {
-                    Name = m.FullName,
-                    Version = m.ParentClass.Version,
-                    Description = m.Description,
-                    Params = m.Parameters.Select(p => new OpenRpcContentDescriptor
-                    {
-                        Name = p.Name,
-                        Description = p.Description,
-                        Required = !p.Optional,
-                        Schema = schemaGenerator.GetSchema(p.ClrType)
-                    }).ToArray()
-                };
-
-                var resultSchema = schemaGenerator.GetSchema(m.MethodInfo.ReturnType);
-                if (resultSchema != null)
-                {
-                    method.Result = new OpenRpcContentDescriptor
-                    {
-                        Name = "result",
-                        Schema = resultSchema
-                    };
-                }
-
-                methods.Add(method);
-            }
-
-            return new OpenRpcDocument
-            {
-                Info = options.OpenRpc.Info,
-                Methods = methods.ToArray(),
-                Components = new OpenRpcComponents
-                {
-                    Schemas = schemaGenerator.Schemas
-                }
-            };
+            return OpenRpcDocumentGenerator.Generate(options, context, rpcMethods);
         }
 
         [JsonRpcGetSerializerOptions]

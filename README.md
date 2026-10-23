@@ -118,11 +118,90 @@ Both `IncludeStackTraceInErrors` and `IncludeExceptionMessagesInErrors` default 
 
 ## OpenRPC discovery
 
-Enable `JsonRpc.Options.OpenRpc.IsEnabled` to expose `rpc.discover`. Method filters limit discovery output; they do **not** enforce authorization when a method is invoked. Generated documents declare OpenRPC 1.3.0 and are validated against the official meta-schema in tests.
+Enable `JsonRpc.Options.OpenRpc.IsEnabled` to expose `rpc.discover`. Method filters limit discovery output; they do **not** enforce authorization when a method is invoked. Generated documents declare OpenRPC 1.4.1 and are validated against the official meta-schema in tests.
 
 Schema component names now include CLR namespaces. Explicit JSON property names, GUIDs, numeric/string enums, nullable values, recursive objects/collections, and typed dictionaries are covered by tests. Versioned methods include the `x-version` extension; consumers must send that version in HttpJsonRpc's request `version` field.
 
 Custom JSON converters can change shapes in arbitrary ways. Supply a matching `IOpenRpcTypeConverter` for those types; the library cannot infer arbitrary converter behavior or request-dependent serialization. Existing wrapper converters, such as an Undefinable-style converter that unwraps its inner type, remain supported. This release does not attempt complete inference of every custom System.Text.Json contract. Test the actual serialized contracts used by your application.
+
+### Discovery transformers
+
+Configure the following synchronous callback lists on `JsonRpc.Options.OpenRpc`
+before starting the server. Each list runs in registration order; later callbacks
+see earlier changes. These callbacks customize documentation, not runtime binding
+or validation.
+
+| Callback list | Target and context |
+| --- | --- |
+| `SchemaTransformers` | A generated type schema, original `ClrType`, `ConvertedType`, and optional `ComponentName`. |
+| `SchemaUsageTransformers` | A local schema for a property, parameter, result, array item, or dictionary value. Includes `Kind`, `ClrType`, `ContainingType`, `JsonName`, `Member`, `Parameter`, and `Method` where applicable. |
+| `MethodTransformers` | `MethodDescription`, registered `Method`, parameter-to-descriptor mappings, result descriptor, and `RequestContext`. |
+| `DocumentTransformers` | The complete `Document`, included `Methods`, and `RequestContext`. |
+
+For example, a generic contact API can describe a string date, customize a method,
+and publish its server address:
+
+```csharp
+var openRpc = JsonRpc.Options.OpenRpc;
+openRpc.SchemaUsageTransformers.Add(context =>
+{
+    if (context.Kind == OpenRpcSchemaUsageKind.Property &&
+        context.ContainingType == typeof(Contact) &&
+        context.Member?.Name == nameof(Contact.BirthDate))
+    {
+        context.Schema.Format = "date";
+    }
+});
+openRpc.MethodTransformers.Add(context =>
+{
+    if (context.Method.FullName == "contact.create")
+        context.MethodDescription.Summary = "Create a contact";
+});
+openRpc.DocumentTransformers.Add(context =>
+{
+    context.Document.Servers = new[]
+    {
+        new OpenRpcServer { Name = "production", Url = "https://example.com/rpc" }
+    };
+});
+```
+
+Generation follows these rules:
+
+- Method inclusion filters run first. Excluded methods are not passed to transformers.
+- Existing type converters still determine the CLR type's representation. A schema
+  transformer runs after that schema's properties/items have been generated, once
+  per shared component per discovery call, or for each generated inline schema.
+  `ClrType` is the first encountered type (possibly a wrapper such as `Task<T>`);
+  use `ConvertedType` for conventions on the shared underlying type.
+- Property and collection-element usages belong to their containing type, not to a
+  particular endpoint. Their `Method` is null. Parameter and result usages carry
+  the registered method. A DTO parameter carries its `PropertyInfo` in `Member`;
+  a direct parameter carries `ParameterInfo` in `Parameter`. Results expose the
+  return parameter; JSON names reflect serializer naming. Collection elements have
+  no member or JSON name of their own.
+- Usage transformers receive an independent schema and may replace `context.Schema`
+  with another non-null schema. References are wrapped in `allOf` so local keywords
+  remain effective under JSON Schema Draft 7. They do not modify the referenced
+  component. A property inside a shared component still applies wherever that
+  containing type is used; endpoint-specific differences belong on the endpoint's
+  parameter/result schema.
+- Recursive references can point to components still under construction. Schema
+  callbacks should work on their supplied target; whole-document inspection belongs
+  in a document transformer. Preserve references rather than creating cyclic CLR
+  object graphs in the schema model.
+- Method transformers run after that method's descriptors are generated. The
+  parameter map and `Result` identify the initially generated descriptors; if you
+  replace entries in `MethodDescription`, update the replacements directly.
+- Document transformers run last. The document, component schemas, and configured
+  info/contact/license copies belong to the current discovery call.
+- Callbacks can execute concurrently across requests. Do not mutate configuration
+  while serving requests, retain request context, or insert shared mutable metadata
+  objects into multiple documents. Exceptions fail discovery through the normal
+  RPC error-handling path rather than returning a partially customized document.
+
+The schema model's supported keywords still apply. These hooks do not yet add
+schema descriptions, constraint attributes, or automatic XML documentation ingestion.
 
 ## Development and release validation
 

@@ -64,7 +64,7 @@ namespace HttpJsonRpc
                 _Parameters = paramaterInfos.Where(p => p.ParameterType != typeof(CancellationToken) && p.GetCustomAttribute<JsonRpcParameterAttribute>()?.Ignore != true).Select(p =>
                 {
                     var attrib = p.GetCustomAttribute<JsonRpcParameterAttribute>();
-                    return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", p.ParameterType, p.IsOptional);
+                    return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", p.ParameterType, p.IsOptional, parameterInfo: p, propertyInfo: null);
                 }).ToImmutableArray();
             }
             else
@@ -83,7 +83,7 @@ namespace HttpJsonRpc
                         var attrib = p.GetCustomAttribute<JsonRpcParameterAttribute>();
                         var name = p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ??
                             JsonRpc.SerializerOptions.PropertyNamingPolicy?.ConvertName(p.Name) ?? p.Name;
-                        return new JsonRpcParameter(name, attrib?.Description ?? "", p.PropertyType, !p.IsRequired());
+                        return new JsonRpcParameter(name, attrib?.Description ?? "", p.PropertyType, !p.IsRequired(), parameterInfo: null, propertyInfo: p);
                     }).ToImmutableArray();
             }
         }

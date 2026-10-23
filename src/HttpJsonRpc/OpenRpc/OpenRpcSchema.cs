@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
 
 namespace HttpJsonRpc
@@ -28,6 +29,7 @@ namespace HttpJsonRpc
         public object[] Enum { get; set; }
         public string[] Required { get; set; }
         public OpenRpcSchema AdditionalProperties { get; set; }
+        public OpenRpcSchema[] AllOf { get; set; }
         public OpenRpcSchema[] AnyOf { get; set; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -35,6 +37,21 @@ namespace HttpJsonRpc
 
         [JsonPropertyName("$ref")]
         public string Ref { get; set; }
+
+        internal OpenRpcSchema Copy()
+        {
+            var copy = new OpenRpcSchema
+            {
+                Items = Items?.Copy(), Format = Format, Ref = Ref, Nullable = Nullable,
+                Required = Required?.ToArray(), Enum = Enum?.ToArray(),
+                Properties = Properties?.ToDictionary(p => p.Key, p => p.Value.Copy()),
+                AdditionalProperties = AdditionalProperties?.Copy(),
+                AllOf = AllOf?.Select(s => s.Copy()).ToArray(),
+                AnyOf = AnyOf?.Select(s => s.Copy()).ToArray()
+            };
+            foreach (var type in _Types) copy.AddType(type);
+            return copy;
+        }
 
         public void AddType(string type)
         {
