@@ -29,10 +29,16 @@ namespace HttpJsonRpc
             ParameterInfo parameter = null, JsonRpcMethod method = null)
         {
             var schema = GetSchema(type);
-            if (schema == null || _UsageTransformers.Length == 0) return schema;
+            if (schema == null) return null;
+            // Parameters and results have their own content descriptors. Nested properties
+            // need their documentation on the local schema instead.
+            var description = kind == OpenRpcSchemaUsageKind.Property
+                ? member?.GetCustomAttribute<JsonRpcParameterAttribute>(true)?.Description : null;
+            if (description == null && _UsageTransformers.Length == 0) return schema;
             schema = schema.Copy();
             // Draft 7 ignores siblings of $ref. Each usage gets an independent wrapper.
             if (schema.Ref != null) schema = new OpenRpcSchema { AllOf = new[] { schema } };
+            if (description != null) schema.Description = description;
             var context = new OpenRpcSchemaUsageTransformerContext(kind, type, schema, containingType, jsonName, member, parameter, method);
             foreach (var transformer in _UsageTransformers)
             {
@@ -44,6 +50,7 @@ namespace HttpJsonRpc
 
         private void TransformSchema(Type type, Type convertedType, string name, OpenRpcSchema schema)
         {
+            schema.Description = convertedType.GetCustomAttribute<JsonRpcSchemaAttribute>(true)?.Description;
             var context = new OpenRpcSchemaTransformerContext(type, convertedType, name, schema);
             foreach (var transformer in _SchemaTransformers) transformer(context);
         }

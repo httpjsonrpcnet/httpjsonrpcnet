@@ -124,6 +124,62 @@ Schema component names now include CLR namespaces. Explicit JSON property names,
 
 Custom JSON converters can change shapes in arbitrary ways. Supply a matching `IOpenRpcTypeConverter` for those types; the library cannot infer arbitrary converter behavior or request-dependent serialization. Existing wrapper converters, such as an Undefinable-style converter that unwraps its inner type, remain supported. This release does not attempt complete inference of every custom System.Text.Json contract. Test the actual serialized contracts used by your application.
 
+### Explicit descriptions
+
+Use HttpJsonRpc attributes to author API documentation:
+
+| Target | Attribute | Discovery field |
+| --- | --- | --- |
+| RPC operation | `JsonRpcMethod.Description` | Method description |
+| Direct parameter or flattened `[JsonRpcParams]` property | `JsonRpcParameter.Description` | Parameter content descriptor description |
+| Nested object property | `JsonRpcParameter.Description` | Local property schema description |
+| Shared type | `JsonRpcSchema.Description` | Type schema description |
+| Method success result | Method-level `JsonRpcResult.Description` | Result content descriptor description |
+
+```csharp
+[JsonRpcSchema(Description = "Values used to create a contact.")]
+public class ContactCreateValues
+{
+    [JsonRpcParameter(Description = "The contact's given name.")]
+    public string FirstName { get; set; }
+}
+
+[JsonRpcClass("contact")]
+public class ContactApi
+{
+    [JsonRpcMethod(Description = "Creates a contact.")]
+    [JsonRpcResult(Description = "The newly created contact.")]
+    public Task<Contact> CreateAsync(
+        [JsonRpcParameter(Description = "Values for the new contact.")]
+        ContactCreateValues values)
+    {
+        // Create and return the application's Contact model.
+        throw new NotImplementedException();
+    }
+}
+```
+
+`JsonRpcSchema` supports classes, structs, interfaces, and enums. Its description
+is read from the converted underlying type, so `Task<Contact>` uses the `Contact`
+schema's description. Type attributes inherit along class inheritance; attributes
+on interfaces are not automatically imported into implementing classes. Nested
+properties follow the serializer's selected members, including renamed, inherited,
+and shadowed properties. Ignored members are not documented.
+
+Descriptions on nested object references use a local `allOf` wrapper and leave the
+shared component description intact. Parameters and results keep their usage text
+on their content descriptors rather than duplicating it on the referenced schema.
+`JsonRpcResult` is applied to the method, not the return-value attribute target.
+It does not introduce a result for `void`, `Task`, or `ValueTask` methods that have
+no generated result schema.
+
+Attribute descriptions are populated before the relevant transformers run, so
+transformers can override or clear them. Unset schema descriptions are omitted;
+explicit empty strings remain empty. Text is preserved verbatim, including Markdown.
+The library does not automatically import `System.ComponentModel.DescriptionAttribute`
+or XML comments. These attributes affect discovery only, not runtime validation,
+JSON property names, or method execution.
+
 ### Discovery transformers
 
 Configure the following synchronous callback lists on `JsonRpc.Options.OpenRpc`
@@ -200,8 +256,8 @@ Generation follows these rules:
   objects into multiple documents. Exceptions fail discovery through the normal
   RPC error-handling path rather than returning a partially customized document.
 
-The schema model's supported keywords still apply. These hooks do not yet add
-schema descriptions, constraint attributes, or automatic XML documentation ingestion.
+The schema model's supported keywords still apply. Constraint attributes and
+automatic XML documentation ingestion are not implemented.
 
 ## Development and release validation
 

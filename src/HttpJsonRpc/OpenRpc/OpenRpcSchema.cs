@@ -25,6 +25,7 @@ namespace HttpJsonRpc
 
         public OpenRpcSchema Items { get; set; }
         public Dictionary<string, OpenRpcSchema> Properties { get; set; }
+        public string Description { get; set; }
         public string Format { get; set; }
         public object[] Enum { get; set; }
         public string[] Required { get; set; }
@@ -42,7 +43,7 @@ namespace HttpJsonRpc
         {
             var copy = new OpenRpcSchema
             {
-                Items = Items?.Copy(), Format = Format, Ref = Ref, Nullable = Nullable,
+                Items = Items?.Copy(), Description = Description, Format = Format, Ref = Ref, Nullable = Nullable,
                 Required = Required?.ToArray(), Enum = Enum?.ToArray(),
                 Properties = Properties?.ToDictionary(p => p.Key, p => p.Value.Copy()),
                 AdditionalProperties = AdditionalProperties?.Copy(),

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Reflection;
 
 namespace HttpJsonRpc
 {
@@ -31,7 +32,11 @@ namespace HttpJsonRpc
                 }
                 var resultSchema = generator.GetUsageSchema(method.MethodInfo.ReturnType, OpenRpcSchemaUsageKind.Result,
                     method.MethodInfo.DeclaringType, "result", method.MethodInfo, method.MethodInfo.ReturnParameter, method);
-                var result = resultSchema == null ? null : new OpenRpcContentDescriptor { Name = "result", Schema = resultSchema };
+                var result = resultSchema == null ? null : new OpenRpcContentDescriptor
+                {
+                    Name = "result", Schema = resultSchema,
+                    Description = method.MethodInfo.GetCustomAttribute<JsonRpcResultAttribute>(true)?.Description
+                };
                 var description = new OpenRpcMethod
                 {
                     Name = method.FullName, Version = method.ParentClass.Version, Description = method.Description,

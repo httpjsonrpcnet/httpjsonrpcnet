@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add JsonRpcSchema descriptions for types and method-level JsonRpcResult descriptions for success results.
+- Include JsonRpcParameter descriptions on nested property schemas without modifying shared components.
+- Apply explicit description attributes before transformers; do not import general-purpose DescriptionAttribute metadata.
+
 - Add ordered schema, schema-usage, method, and document transformers for discovery customization.
 - Preserve parameter/property reflection metadata for documentation callbacks.
 - Isolate usage schemas and per-request document info; support `allOf` for local reference customization.
