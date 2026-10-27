@@ -32,6 +32,7 @@ namespace HttpJsonRpc
         public OpenRpcSchema AdditionalProperties { get; set; }
         public OpenRpcSchema[] AllOf { get; set; }
         public OpenRpcSchema[] AnyOf { get; set; }
+        public OpenRpcSchema Not { get; set; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public bool Nullable { get; set; }
@@ -48,11 +49,13 @@ namespace HttpJsonRpc
                 Properties = Properties?.ToDictionary(p => p.Key, p => p.Value.Copy()),
                 AdditionalProperties = AdditionalProperties?.Copy(),
                 AllOf = AllOf?.Select(s => s.Copy()).ToArray(),
-                AnyOf = AnyOf?.Select(s => s.Copy()).ToArray()
+                AnyOf = AnyOf?.Select(s => s.Copy()).ToArray(), Not = Not?.Copy()
             };
             foreach (var type in _Types) copy.AddType(type);
             return copy;
         }
+
+        internal void RemoveType(string type) => _Types.Remove(type);
 
         public void AddType(string type)
         {

@@ -180,6 +180,66 @@ The library does not automatically import `System.ComponentModel.DescriptionAttr
 or XML comments. These attributes affect discovery only, not runtime validation,
 JSON property names, or method execution.
 
+### Requiredness and nullability
+
+Presence and nullability are independent. `JsonRpcParameter` accepts `Required`
+and `Nullable` booleans on method parameters and object properties. `JsonRpcResult`
+accepts `Nullable` on methods. Omit either property to infer it; explicitly setting
+`false` is an override, not the same as leaving it unset.
+
+```csharp
+#nullable enable
+
+public class ContactDetails
+{
+    [JsonRpcParameter(Required = true)]
+    public string Name { get; set; } = "";
+
+    [JsonRpcParameter(Required = true)]
+    public string? Nickname { get; set; }
+
+    public int? Age { get; set; }
+}
+```
+
+Here `name` must be present and cannot be null; `nickname` must be present but can
+be null; `age` is optional and can be null. Explicit `Nullable = true` or
+`Nullable = false` overrides inference for that value. On a collection, it changes
+the collection's nullability, not the nullability of its elements.
+
+- Requiredness defaults to the existing contract: non-optional method parameters
+  are required, and object properties use serializer-required metadata, C# `required`,
+  `[JsonRequired]`, or the existing `[Required]` presence check. Nullability does
+  not imply requiredness. Value-validation rules such as non-empty strings are
+  not inferred from DataAnnotations.
+- `Nullable<T>` permits null. Other value types do not. Modern C# nullable reference
+  metadata is read using reflection, including enclosing nullable contexts,
+  generic substitutions, inherited members, array elements, and dictionary values.
+  `Task<T>` and `ValueTask<T>` use the nullability of `T` for their result.
+- When reference metadata is absent (for example, unannotated legacy code), discovery
+  preserves the previous schema behavior: typed schemas do not add null; an
+  unconstrained `object` schema still accepts any JSON value. Use an explicit
+  override to describe a different contract. The reader consumes compiler nullable
+  annotations, not flow-analysis attributes such as `[AllowNull]` or `[MaybeNull]`.
+- Different nested annotations can produce separate components for the same CLR
+  type, such as `List<string>` and `List<string?>`. Follow emitted references or use
+  the transformer's `ComponentName`; `GetName(Type)` supplies the base name and
+  cannot identify a particular annotated usage.
+- Custom wire-type converters retain their outer usage nullability, but must
+  describe their own nested wire shapes. Nullable metadata cannot infer a custom
+  serializer's output representation.
+
+Method-parameter presence uses the OpenRPC descriptor's `required` boolean.
+Object-property presence uses the JSON Schema `required` array. Null is expressed
+with JSON Schema type unions or `anyOf`; a non-null override can use `not` to exclude
+null from a referenced or composed schema without modifying its shared definition.
+No OpenAPI-style `nullable` keyword is generated.
+
+Usage transformers run after inferred and explicit nullability. Method transformers
+run after descriptor requiredness is resolved, and schema transformers can change
+an object's generated `required` array. These settings affect discovery only:
+they do not change parameter binding, defaults, serialization, or runtime validation.
+
 ### Discovery transformers
 
 Configure the following synchronous callback lists on `JsonRpc.Options.OpenRpc`

@@ -24,10 +24,13 @@ namespace HttpJsonRpc
                     {
                         Name = parameter.Name,
                         Description = parameter.Description,
-                        Required = !parameter.Optional,
+                        Required = (parameter.PropertyInfo?.GetCustomAttribute<JsonRpcParameterAttribute>(true)
+                            ?? parameter.ParameterInfo?.GetCustomAttribute<JsonRpcParameterAttribute>(true))?.RequiredOverride ?? !parameter.Optional,
                         Schema = generator.GetUsageSchema(parameter.ClrType, OpenRpcSchemaUsageKind.Parameter,
                             parameter.PropertyInfo?.DeclaringType ?? method.MethodInfo.DeclaringType,
-                            parameter.Name, parameter.PropertyInfo, parameter.ParameterInfo, method)
+                            parameter.Name, parameter.PropertyInfo, parameter.ParameterInfo, method,
+                            containing: method.ParamsType == null ? null : OpenRpcNullabilityReader.Read(method.ParamsType,
+                                null, method.MethodInfo.GetParameters()[0]))
                     });
                 }
                 var resultSchema = generator.GetUsageSchema(method.MethodInfo.ReturnType, OpenRpcSchemaUsageKind.Result,
