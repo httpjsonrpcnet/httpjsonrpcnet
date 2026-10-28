@@ -381,6 +381,13 @@ Generation follows these rules:
 The schema model's supported keywords still apply. Advanced conditional constraints
 and automatic XML documentation ingestion are not implemented.
 
+### Request and result examples
+
+Use method transformers to publish named input/result pairings with the existing
+`OpenRpcExamplePairing` and `OpenRpcExample` models. See
+[OpenRPC examples](docs/OPENRPC_EXAMPLES.md) for contact creation, lookup results,
+explicit JSON nulls, and the generated discovery JSON.
+
 ## Development and release validation
 
 ```powershell
@@ -391,4 +398,4 @@ dotnet pack src/HttpJsonRpc/HttpJsonRpc.csproj -c Release --no-build -o artifact
 ./eng/Verify-Package.ps1 (Get-ChildItem artifacts/*.nupkg).FullName
 ```
 
-Tests target .NET Framework 4.8 (Windows) and .NET 10. They use loopback listeners with dynamically assigned ports and vendored schemas, without MDware or external services. CI runs the same builds/tests and checks package contents. Transitive NuGet vulnerability warnings fail the build. The sample targets .NET 10.
+Tests target .NET Framework 4.8 (Windows) and .NET 10. They use loopback listeners with dynamically assigned ports and vendored schemas, without external services. CI runs the same builds/tests and checks package contents. Transitive NuGet vulnerability warnings fail the build. The sample targets .NET 10.
