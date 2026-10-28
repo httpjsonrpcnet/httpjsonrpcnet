@@ -240,6 +240,68 @@ run after descriptor requiredness is resolved, and schema transformers can chang
 an object's generated `required` array. These settings affect discovery only:
 they do not change parameter binding, defaults, serialization, or runtime validation.
 
+### Schema constraints
+
+`JsonRpcParameter`, `JsonRpcResult`, and `JsonRpcSchema` support these explicit
+JSON Schema Draft 7 keywords. They describe the public contract; they do not add
+runtime input validation or change serialization.
+
+| Attribute property | Type | Meaning |
+| --- | --- | --- |
+| `Format` | `string` | Semantic format, such as `email`, `date`, or `uri` |
+| `MinLength`, `MaxLength` | `int` | Inclusive string-length limits |
+| `Pattern` | `string` | JSON Schema regular expression |
+| `Minimum`, `Maximum` | `double` | Inclusive numeric bounds |
+| `ExclusiveMinimum`, `ExclusiveMaximum` | `double` | Exclusive numeric bounds, not boolean switches |
+| `MultipleOf` | `double` | Positive numeric divisor |
+| `MinItems`, `MaxItems` | `int` | Inclusive array-size limits |
+| `UniqueItems` | `bool` | Whether array elements must be unique |
+
+```csharp
+public class ContactInput
+{
+    [JsonRpcParameter(Required = true, Nullable = false,
+        Format = "email", MaxLength = 254)]
+    public string Email { get; set; } = "";
+
+    [JsonRpcParameter(Minimum = 0, Maximum = 100, MultipleOf = 0.5)]
+    public double Score { get; set; }
+
+    [JsonRpcParameter(MinItems = 1, MaxItems = 10, UniqueItems = true)]
+    public string[] Tags { get; set; } = new string[0];
+}
+```
+
+Omitting a property emits no additional constraint. Explicit zero and false values
+are retained. Attribute numeric bounds use `double` and therefore have its precision
+limits; no string-based exact-number overload is provided. Negative lengths/counts,
+non-finite numeric bounds, and non-positive `MultipleOf` values fail discovery with
+an explanatory exception. Combined constraints must be chosen consistently by the
+author; an empty allowed range is not automatically corrected.
+
+Use JSON Schema/ECMAScript-compatible patterns, not .NET-specific regular-expression
+syntax. Patterns are not implicitly anchored; use `^` and `$` when the whole string
+must match. String lengths count Unicode code points, and `MinLength = 1` does not
+exclude whitespace. Format enforcement depends on the consuming validator.
+
+Constraints are placed on the schema, not on the OpenRPC content descriptor.
+`JsonRpcResult` describes the unwrapped result of async methods; `JsonRpcSchema`
+describes the converted type's shared schema. Parameters, flattened request
+properties, and nested object properties receive local constraints. References use
+an `allOf` wrapper so Draft 7 applies local keywords without modifying the shared
+component. Shared type constraints still apply: local constraints can tighten them,
+but cannot relax constraints inside the referenced definition.
+
+Constraints do not imply requiredness or non-nullability. For example, a nullable
+string with `MaxLength = 20` still permits null. Type-specific keywords do not apply
+to unrelated JSON types. No additional DataAnnotations validation attributes are
+imported automatically.
+
+Type constraints run before schema transformers; usage constraints run before usage
+transformers. Transformers may set or clear the corresponding nullable properties on
+`OpenRpcSchema`, and schema copies preserve them. For a shared referenced constraint,
+change the component through a schema transformer if it needs to be relaxed.
+
 ### Discovery transformers
 
 Configure the following synchronous callback lists on `JsonRpc.Options.OpenRpc`
@@ -316,8 +378,8 @@ Generation follows these rules:
   objects into multiple documents. Exceptions fail discovery through the normal
   RPC error-handling path rather than returning a partially customized document.
 
-The schema model's supported keywords still apply. Constraint attributes and
-automatic XML documentation ingestion are not implemented.
+The schema model's supported keywords still apply. Advanced conditional constraints
+and automatic XML documentation ingestion are not implemented.
 
 ## Development and release validation
 

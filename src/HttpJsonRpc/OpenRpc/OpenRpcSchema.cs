@@ -27,6 +27,17 @@ namespace HttpJsonRpc
         public Dictionary<string, OpenRpcSchema> Properties { get; set; }
         public string Description { get; set; }
         public string Format { get; set; }
+        public int? MinLength { get; set; }
+        public int? MaxLength { get; set; }
+        public string Pattern { get; set; }
+        public double? Minimum { get; set; }
+        public double? Maximum { get; set; }
+        public double? ExclusiveMinimum { get; set; }
+        public double? ExclusiveMaximum { get; set; }
+        public double? MultipleOf { get; set; }
+        public int? MinItems { get; set; }
+        public int? MaxItems { get; set; }
+        public bool? UniqueItems { get; set; }
         public object[] Enum { get; set; }
         public string[] Required { get; set; }
         public OpenRpcSchema AdditionalProperties { get; set; }
@@ -46,6 +57,10 @@ namespace HttpJsonRpc
             {
                 Items = Items?.Copy(), Description = Description, Format = Format, Ref = Ref, Nullable = Nullable,
                 Required = Required?.ToArray(), Enum = Enum?.ToArray(),
+                MinLength = MinLength, MaxLength = MaxLength, Pattern = Pattern,
+                Minimum = Minimum, Maximum = Maximum, ExclusiveMinimum = ExclusiveMinimum,
+                ExclusiveMaximum = ExclusiveMaximum, MultipleOf = MultipleOf,
+                MinItems = MinItems, MaxItems = MaxItems, UniqueItems = UniqueItems,
                 Properties = Properties?.ToDictionary(p => p.Key, p => p.Value.Copy()),
                 AdditionalProperties = AdditionalProperties?.Copy(),
                 AllOf = AllOf?.Select(s => s.Copy()).ToArray(),
