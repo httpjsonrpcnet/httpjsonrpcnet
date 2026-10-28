@@ -68,6 +68,13 @@ namespace HttpJsonRpc
 
         public string GetName(Type type)
         {
+            var name = type.GetCustomAttribute<JsonRpcSchemaAttribute>(true)?.Name;
+            if (name != null)
+            {
+                if (!Regex.IsMatch(name, @"\A[a-zA-Z0-9_.-]+\z"))
+                    throw new InvalidOperationException($"Schema name '{name}' on {type} must contain only letters, digits, underscores, periods or hyphens and cannot be empty.");
+                return name;
+            }
             var converter = Options.OpenRpc.TypeConverters.FirstOrDefault(c => c.CanConvert(this, type));
             if (converter != null) return converter.GetName(this, type);
             return GetTypeIdentity(type);
@@ -126,7 +133,7 @@ namespace HttpJsonRpc
                 // Fail explicitly rather than silently reusing another CLR type's schema.
                 var name = GetName(type) + nullability.ComponentSuffix;
                 if (_SchemaTypes.TryGetValue(name, out var prior) && prior != actual)
-                    throw new InvalidOperationException($"Schema name '{name}' is shared by {prior} and {actual}. Give the custom converters distinct names.");
+                    throw new InvalidOperationException($"Schema name '{name}' is shared by {prior} and {actual}. Give the schema attributes or custom converters distinct names.");
                 if (Schemas.ContainsKey(name)) return Nullable(new OpenRpcSchema { Ref = "#/components/schemas/" + name }, nullable);
                 _SchemaTypes[name] = actual;
                 schema = new OpenRpcSchema();

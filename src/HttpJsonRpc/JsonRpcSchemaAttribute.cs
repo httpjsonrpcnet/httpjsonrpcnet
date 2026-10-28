@@ -6,6 +6,8 @@ namespace HttpJsonRpc
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface | AttributeTargets.Enum, AllowMultiple = false, Inherited = true)]
     public class JsonRpcSchemaAttribute : Attribute
     {
+        /// <summary>Overrides the reusable component name and its references. Omit to retain generated naming.</summary>
+        public string Name { get; set; }
         public string Description { get; set; }
         internal OpenRpcSchemaConstraints Constraints { get; } = new OpenRpcSchemaConstraints();
         /// <summary>Describes the JSON Schema format constraint in discovery only.</summary>

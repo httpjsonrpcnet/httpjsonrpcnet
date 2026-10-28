@@ -153,3 +153,29 @@ The no-match pairing produces:
   validate those values against its generated schemas during discovery.
 - These examples use existing transformers; no example-provider attribute is
   required. Each callback creates fresh objects for its discovery invocation.
+
+## Public schema names
+
+Use `JsonRpcSchema.Name` to give a reusable schema a stable public component name:
+
+```csharp
+[JsonRpcSchema(Name = "Contact", Description = "A contact record.")]
+public class ContactDto
+{
+    public string DisplayName { get; set; }
+}
+```
+
+The component key is `Contact`, and references use `#/components/schemas/Contact`.
+`Description` remains the schema description. Existing constraint properties remain
+available and are unchanged. Naming does not change JSON payload property names.
+
+Omitting `Name` preserves the existing converter/generated naming. An explicit name
+is used before a type converter's naming hook; wrapper converters that delegate to
+the wrapped type's name also preserve it. Names must be nonempty and contain only
+ASCII letters, digits, underscores, periods or hyphens. Conflicting component names
+for different types fail explicitly. Give different closed generic types distinct
+names through a converter if needed; a fixed attribute name is shared by all closed
+forms. Existing nullability specialization suffixes still apply where necessary.
+Scalar schemas that are emitted inline do not acquire a component merely by setting
+`Name`.
