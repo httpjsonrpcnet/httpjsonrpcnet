@@ -15,8 +15,8 @@ namespace HttpJsonRpc.Sample
             MathService = mathService;
         }
 
-        [JsonRpcMethod(Description = "Provides the sum of two numbers.")]
-        public async Task<int> SumAsync([JsonRpcParameter(Description = "The first number")] int n1, [JsonRpcParameter(Description = "The second number")] int n2)
+        [JsonRpcMethod, OpenRpcMethod(Description = "Provides the sum of two numbers.")]
+        public async Task<int> SumAsync([OpenRpcParameter(Description = "The first number")] int n1, [OpenRpcParameter(Description = "The second number")] int n2)
         {
             await Task.CompletedTask;
             var value = MathService.Sum(n1, n2);

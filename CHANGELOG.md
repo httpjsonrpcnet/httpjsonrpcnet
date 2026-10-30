@@ -2,8 +2,17 @@
 
 ## Unreleased
 
-- Add JsonRpcSchema descriptions for types and method-level JsonRpcResult descriptions for success results.
-- Include JsonRpcParameter descriptions on nested property schemas without modifying shared components.
+- Add an optional `name` filter to `rpc.discover`, supporting case-sensitive exact names and trailing-wildcard prefixes while preserving visibility filters, schema dependencies, transformers, and version metadata.
+
+- Breaking: separate documentation into `OpenRpcMethod`, `OpenRpcParameter`, `OpenRpcProperty`, `OpenRpcSchema`, and `OpenRpcResult` attributes. These affect discovery only.
+- Breaking: replace `JsonRpcSchema` and `JsonRpcResult` with `OpenRpcSchema` and `OpenRpcResult`, without compatibility aliases.
+- Breaking: move `JsonRpcMethod.Description` to `OpenRpcMethod`; move `JsonRpcParameter` descriptions, requiredness, nullability, and schema constraints to `OpenRpcParameter` for method parameters and `OpenRpcProperty` for object properties (including flattened parameter containers).
+- Keep RPC names and binding settings on `JsonRpc*` attributes, and serialized property names on System.Text.Json attributes/options.
+- Breaking: remove descriptions from the runtime `JsonRpcMethod` and `JsonRpcParameter` registry models and the description argument from the `JsonRpcParameter` constructor. Use `rpc.discover` for documentation.
+- Preserve existing binding, deserialization, invocation, and transformer behavior. No runtime validation is added.
+
+- Add OpenRpcSchema descriptions for types and method-level OpenRpcResult descriptions for success results.
+- Include OpenRpcProperty descriptions on nested property schemas without modifying shared components.
 - Apply explicit description attributes before transformers; do not import general-purpose DescriptionAttribute metadata.
 
 - Add ordered schema, schema-usage, method, and document transformers for discovery customization.

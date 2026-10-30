@@ -20,12 +20,13 @@ namespace HttpJsonRpc
                 var parameters = new Dictionary<JsonRpcParameter, OpenRpcContentDescriptor>();
                 foreach (var parameter in method.Parameters)
                 {
+                    var propertyAttribute = parameter.PropertyInfo?.GetCustomAttribute<OpenRpcPropertyAttribute>(true);
+                    var parameterAttribute = parameter.ParameterInfo?.GetCustomAttribute<OpenRpcParameterAttribute>(true);
                     parameters.Add(parameter, new OpenRpcContentDescriptor
                     {
                         Name = parameter.Name,
-                        Description = parameter.Description,
-                        Required = (parameter.PropertyInfo?.GetCustomAttribute<JsonRpcParameterAttribute>(true)
-                            ?? parameter.ParameterInfo?.GetCustomAttribute<JsonRpcParameterAttribute>(true))?.RequiredOverride ?? !parameter.Optional,
+                        Description = propertyAttribute?.Description ?? parameterAttribute?.Description,
+                        Required = propertyAttribute?.RequiredOverride ?? parameterAttribute?.RequiredOverride ?? !parameter.Optional,
                         Schema = generator.GetUsageSchema(parameter.ClrType, OpenRpcSchemaUsageKind.Parameter,
                             parameter.PropertyInfo?.DeclaringType ?? method.MethodInfo.DeclaringType,
                             parameter.Name, parameter.PropertyInfo, parameter.ParameterInfo, method,
@@ -38,11 +39,11 @@ namespace HttpJsonRpc
                 var result = resultSchema == null ? null : new OpenRpcContentDescriptor
                 {
                     Name = "result", Schema = resultSchema,
-                    Description = method.MethodInfo.GetCustomAttribute<JsonRpcResultAttribute>(true)?.Description
+                    Description = method.MethodInfo.GetCustomAttribute<OpenRpcResultAttribute>(true)?.Description
                 };
                 var description = new OpenRpcMethod
                 {
-                    Name = method.FullName, Version = method.ParentClass.Version, Description = method.Description,
+                    Name = method.FullName, Version = method.ParentClass.Version, Description = method.MethodInfo.GetCustomAttribute<OpenRpcMethodAttribute>(true)?.Description,
                     Params = method.Parameters.Select(p => parameters[p]).Cast<object>().ToArray(), Result = result
                 };
                 var context = new OpenRpcMethodTransformerContext(requestContext, method, description,

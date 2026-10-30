@@ -156,10 +156,10 @@ The no-match pairing produces:
 
 ## Public schema names
 
-Use `JsonRpcSchema.Name` to give a reusable schema a stable public component name:
+Use `OpenRpcSchema.Name` to give a reusable schema a stable public component name:
 
 ```csharp
-[JsonRpcSchema(Name = "Contact", Description = "A contact record.")]
+[OpenRpcSchema(Name = "Contact", Description = "A contact record.")]
 public class ContactDto
 {
     public string DisplayName { get; set; }
@@ -177,5 +177,6 @@ ASCII letters, digits, underscores, periods or hyphens. Conflicting component na
 for different types fail explicitly. Give different closed generic types distinct
 names through a converter if needed; a fixed attribute name is shared by all closed
 forms. Existing nullability specialization suffixes still apply where necessary.
-Scalar schemas that are emitted inline do not acquire a component merely by setting
-`Name`.
+Enums with an explicit `Name` are emitted as reusable components, including when
+used through nullable or task wrappers. Other inline scalar schemas do not acquire
+a component merely by setting `Name`.

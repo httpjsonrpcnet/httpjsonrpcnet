@@ -124,33 +124,82 @@ Schema component names now include CLR namespaces. Explicit JSON property names,
 
 Custom JSON converters can change shapes in arbitrary ways. Supply a matching `IOpenRpcTypeConverter` for those types; the library cannot infer arbitrary converter behavior or request-dependent serialization. Existing wrapper converters, such as an Undefinable-style converter that unwraps its inner type, remain supported. This release does not attempt complete inference of every custom System.Text.Json contract. Test the actual serialized contracts used by your application.
 
+### Filtering discovery by method name
+
+`rpc.discover` accepts an optional `name` parameter. Matching uses the full method
+name and is case-sensitive:
+
+- `"contact.find"` selects that exact name.
+- `"contact.*"` selects names beginning with `contact.`.
+- Omission, `null`, or `"*"` selects all visible methods.
+- An empty string or an unmatched name returns an empty `methods` array.
+
+Only a final `*` has wildcard meaning; other characters are matched literally.
+This optional parameter is an HttpJsonRpc extension to the standard discovery call.
+Calls without parameters continue to work.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "rpc.discover",
+  "params": { "name": "contact.find" }
+}
+```
+
+Configured `MethodFilters` still control visibility. Name filtering runs before
+schema generation, so the document includes matching methods and their schema
+dependencies. Method and document transformers receive the selected methods;
+transformers can still add their own content and components.
+
+Filtering does not select an API version or change `info.version`. Methods retain
+`x-version`, including when several registered versions share the selected name.
+Such duplicate names remain a limitation for standard OpenRPC consumers, which
+require unique method names within a document.
+
 ### Explicit descriptions
 
-Use HttpJsonRpc attributes to author API documentation:
+Use `OpenRpc*` attributes to author documentation. These attributes and discovery
+transformers do not validate requests or results, register methods, or change
+serialization. `JsonRpc*` attributes configure routing and binding; System.Text.Json
+attributes and options configure serialization. Applications enforce their own
+validation rules.
+
+Names come from the executable contract: `JsonRpcClass` and `JsonRpcMethod` supply
+RPC names, `JsonRpcParameter.Name` supplies direct parameter names, and
+`JsonPropertyName` or the serializer naming policy supplies object property and
+flattened `[JsonRpcParams]` parameter names. Documentation attributes cannot
+rename these. `OpenRpcSchema.Name` only controls reusable schema component names;
+the result content descriptor is named `result`.
+
+The runtime registry remains available for dispatch and inspection, but its
+`JsonRpcMethod` and `JsonRpcParameter` models no longer contain descriptions.
+Use `rpc.discover` for API documentation.
 
 | Target | Attribute | Discovery field |
 | --- | --- | --- |
-| RPC operation | `JsonRpcMethod.Description` | Method description |
-| Direct parameter or flattened `[JsonRpcParams]` property | `JsonRpcParameter.Description` | Parameter content descriptor description |
-| Nested object property | `JsonRpcParameter.Description` | Local property schema description |
-| Shared type | `JsonRpcSchema.Description` | Type schema description |
-| Method success result | Method-level `JsonRpcResult.Description` | Result content descriptor description |
+| RPC operation | `OpenRpcMethod.Description` | Method description |
+| Direct method parameter | `OpenRpcParameter.Description` | Parameter content descriptor description |
+| Flattened `[JsonRpcParams]` property | `OpenRpcProperty.Description` | Parameter content descriptor description |
+| Nested object property or serialized field | `OpenRpcProperty.Description` | Local property schema description |
+| Shared type | `OpenRpcSchema.Description` | Type schema description |
+| Method success result | Method-level `OpenRpcResult.Description` | Result content descriptor description |
 
 ```csharp
-[JsonRpcSchema(Description = "Values used to create a contact.")]
+[OpenRpcSchema(Description = "Values used to create a contact.")]
 public class ContactCreateValues
 {
-    [JsonRpcParameter(Description = "The contact's given name.")]
+    [OpenRpcProperty(Description = "The contact's given name.")]
     public string FirstName { get; set; }
 }
 
 [JsonRpcClass("contact")]
 public class ContactApi
 {
-    [JsonRpcMethod(Description = "Creates a contact.")]
-    [JsonRpcResult(Description = "The newly created contact.")]
+    [JsonRpcMethod, OpenRpcMethod(Description = "Creates a contact.")]
+    [OpenRpcResult(Description = "The newly created contact.")]
     public Task<Contact> CreateAsync(
-        [JsonRpcParameter(Description = "Values for the new contact.")]
+        [OpenRpcParameter(Description = "Values for the new contact.")]
         ContactCreateValues values)
     {
         // Create and return the application's Contact model.
@@ -159,17 +208,18 @@ public class ContactApi
 }
 ```
 
-`JsonRpcSchema` supports classes, structs, interfaces, and enums. Its description
+`OpenRpcSchema` supports classes, structs, interfaces, and enums. Its description
 is read from the converted underlying type, so `Task<Contact>` uses the `Contact`
 schema's description. Type attributes inherit along class inheritance; attributes
 on interfaces are not automatically imported into implementing classes. Nested
-properties follow the serializer's selected members, including renamed, inherited,
+properties and serialized fields use `OpenRpcProperty` and follow the serializer's
+selected members, including renamed, inherited,
 and shadowed properties. Ignored members are not documented.
 
 Descriptions on nested object references use a local `allOf` wrapper and leave the
 shared component description intact. Parameters and results keep their usage text
 on their content descriptors rather than duplicating it on the referenced schema.
-`JsonRpcResult` is applied to the method, not the return-value attribute target.
+`OpenRpcResult` is applied to the method, not the return-value attribute target.
 It does not introduce a result for `void`, `Task`, or `ValueTask` methods that have
 no generated result schema.
 
@@ -182,8 +232,9 @@ JSON property names, or method execution.
 
 ### Requiredness and nullability
 
-Presence and nullability are independent. `JsonRpcParameter` accepts `Required`
-and `Nullable` booleans on method parameters and object properties. `JsonRpcResult`
+Presence and nullability are independent. `OpenRpcParameter` and `OpenRpcProperty`
+accept `Required` and `Nullable` booleans on method parameters and object properties,
+respectively. `OpenRpcResult`
 accepts `Nullable` on methods. Omit either property to infer it; explicitly setting
 `false` is an override, not the same as leaving it unset.
 
@@ -192,18 +243,19 @@ accepts `Nullable` on methods. Omit either property to infer it; explicitly sett
 
 public class ContactDetails
 {
-    [JsonRpcParameter(Required = true)]
+    [OpenRpcProperty(Required = true)]
     public string Name { get; set; } = "";
 
-    [JsonRpcParameter(Required = true)]
+    [OpenRpcProperty(Required = true)]
     public string? Nickname { get; set; }
 
     public int? Age { get; set; }
 }
 ```
 
-Here `name` must be present and cannot be null; `nickname` must be present but can
-be null; `age` is optional and can be null. Explicit `Nullable = true` or
+The generated schema describes `name` as required and non-null, `nickname` as
+required and nullable, and `age` as optional and nullable. These annotations do not
+enforce those rules at runtime. Explicit `Nullable = true` or
 `Nullable = false` overrides inference for that value. On a collection, it changes
 the collection's nullability, not the nullability of its elements.
 
@@ -242,7 +294,7 @@ they do not change parameter binding, defaults, serialization, or runtime valida
 
 ### Schema constraints
 
-`JsonRpcParameter`, `JsonRpcResult`, and `JsonRpcSchema` support these explicit
+`OpenRpcParameter`, `OpenRpcProperty`, `OpenRpcResult`, and `OpenRpcSchema` support these explicit
 JSON Schema Draft 7 keywords. They describe the public contract; they do not add
 runtime input validation or change serialization.
 
@@ -260,14 +312,14 @@ runtime input validation or change serialization.
 ```csharp
 public class ContactInput
 {
-    [JsonRpcParameter(Required = true, Nullable = false,
+    [OpenRpcProperty(Required = true, Nullable = false,
         Format = "email", MaxLength = 254)]
     public string Email { get; set; } = "";
 
-    [JsonRpcParameter(Minimum = 0, Maximum = 100, MultipleOf = 0.5)]
+    [OpenRpcProperty(Minimum = 0, Maximum = 100, MultipleOf = 0.5)]
     public double Score { get; set; }
 
-    [JsonRpcParameter(MinItems = 1, MaxItems = 10, UniqueItems = true)]
+    [OpenRpcProperty(MinItems = 1, MaxItems = 10, UniqueItems = true)]
     public string[] Tags { get; set; } = new string[0];
 }
 ```
@@ -285,7 +337,7 @@ must match. String lengths count Unicode code points, and `MinLength = 1` does n
 exclude whitespace. Format enforcement depends on the consuming validator.
 
 Constraints are placed on the schema, not on the OpenRPC content descriptor.
-`JsonRpcResult` describes the unwrapped result of async methods; `JsonRpcSchema`
+`OpenRpcResult` describes the unwrapped result of async methods; `OpenRpcSchema`
 describes the converted type's shared schema. Parameters, flattened request
 properties, and nested object properties receive local constraints. References use
 an `allOf` wrapper so Draft 7 applies local keywords without modifying the shared

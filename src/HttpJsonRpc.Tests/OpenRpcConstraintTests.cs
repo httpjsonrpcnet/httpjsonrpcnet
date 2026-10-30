@@ -128,8 +128,8 @@ namespace HttpJsonRpc.Tests
         [TestCase("ExclusiveMaximum", double.NaN)]
         public void InvalidKeywordValuesFailDiscovery(string name, double value)
         {
-            var attribute = new JsonRpcParameterAttribute();
-            var property = typeof(JsonRpcParameterAttribute).GetProperty(name);
+            var attribute = new OpenRpcParameterAttribute();
+            var property = typeof(OpenRpcParameterAttribute).GetProperty(name);
             property.SetValue(attribute, Convert.ChangeType(value, property.PropertyType));
             Assert.Throws<InvalidOperationException>(() => attribute.Constraints.Apply(new OpenRpcSchema()));
         }

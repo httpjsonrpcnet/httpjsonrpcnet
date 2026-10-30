@@ -11,22 +11,20 @@ namespace HttpJsonRpc
         [JsonIgnore]
         public PropertyInfo PropertyInfo { get; }
         public string Name { get; }
-        public string Description { get; }
         public Type ClrType { get; }
         public string JsonType { get; }
         public bool Optional { get; }
 
-        public JsonRpcParameter(string name, string description, Type clrType, bool optional)
-            : this(name, description, clrType, optional, null, null)
+        public JsonRpcParameter(string name, Type clrType, bool optional)
+            : this(name, clrType, optional, null, null)
         {
         }
 
-        internal JsonRpcParameter(string name, string description, Type clrType, bool optional, ParameterInfo parameterInfo, PropertyInfo propertyInfo)
+        internal JsonRpcParameter(string name, Type clrType, bool optional, ParameterInfo parameterInfo, PropertyInfo propertyInfo)
         {
             ParameterInfo = parameterInfo;
             PropertyInfo = propertyInfo;
             Name = name;
-            Description = description;
             ClrType = clrType;
             JsonType = JsonTypeMap.GetJsonType(clrType);
             Optional = optional;

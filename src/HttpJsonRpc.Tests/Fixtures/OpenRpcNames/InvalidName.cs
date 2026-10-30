@@ -1,5 +1,5 @@
 namespace HttpJsonRpc.Tests.Fixtures.OpenRpcNames
 {
-    [JsonRpcSchema(Name = "invalid/name")]
+    [OpenRpcSchema(Name = "invalid/name")]
     public class InvalidName { }
 }

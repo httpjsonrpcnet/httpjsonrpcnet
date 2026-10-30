@@ -34,14 +34,14 @@ namespace HttpJsonRpc
             // Parameters and results have their own content descriptors. Nested properties
             // need their documentation on the local schema instead.
             var description = kind == OpenRpcSchemaUsageKind.Property
-                ? member?.GetCustomAttribute<JsonRpcParameterAttribute>(true)?.Description : null;
-            var parameterAttribute = member?.GetCustomAttribute<JsonRpcParameterAttribute>(true)
-                ?? parameter?.GetCustomAttribute<JsonRpcParameterAttribute>(true);
+                ? member?.GetCustomAttribute<OpenRpcPropertyAttribute>(true)?.Description : null;
+            var propertyAttribute = member?.GetCustomAttribute<OpenRpcPropertyAttribute>(true);
+            var parameterAttribute = parameter?.GetCustomAttribute<OpenRpcParameterAttribute>(true);
             var nullableOverride = kind == OpenRpcSchemaUsageKind.Result
-                ? member?.GetCustomAttribute<JsonRpcResultAttribute>(true)?.NullableOverride : parameterAttribute?.NullableOverride;
+                ? member?.GetCustomAttribute<OpenRpcResultAttribute>(true)?.NullableOverride : propertyAttribute?.NullableOverride ?? parameterAttribute?.NullableOverride;
             if (nullableOverride.HasValue) schema = ApplyNullability(schema, nullableOverride.Value);
             var constraints = kind == OpenRpcSchemaUsageKind.Result
-                ? member?.GetCustomAttribute<JsonRpcResultAttribute>(true)?.Constraints : parameterAttribute?.Constraints;
+                ? member?.GetCustomAttribute<OpenRpcResultAttribute>(true)?.Constraints : propertyAttribute?.Constraints ?? parameterAttribute?.Constraints;
             if (description == null && constraints?.HasValues != true && _UsageTransformers.Length == 0) return schema;
             schema = schema.Copy();
             // Draft 7 ignores siblings of $ref. Each usage gets an independent wrapper.
@@ -59,7 +59,7 @@ namespace HttpJsonRpc
 
         private void TransformSchema(Type type, Type convertedType, string name, OpenRpcSchema schema)
         {
-            var attribute = convertedType.GetCustomAttribute<JsonRpcSchemaAttribute>(true);
+            var attribute = convertedType.GetCustomAttribute<OpenRpcSchemaAttribute>(true);
             schema.Description = attribute?.Description;
             attribute?.Constraints.Apply(schema);
             var context = new OpenRpcSchemaTransformerContext(type, convertedType, name, schema);
@@ -68,7 +68,7 @@ namespace HttpJsonRpc
 
         public string GetName(Type type)
         {
-            var name = type.GetCustomAttribute<JsonRpcSchemaAttribute>(true)?.Name;
+            var name = type.GetCustomAttribute<OpenRpcSchemaAttribute>(true)?.Name;
             if (name != null)
             {
                 if (!Regex.IsMatch(name, @"\A[a-zA-Z0-9_.-]+\z"))
@@ -120,6 +120,20 @@ namespace HttpJsonRpc
                 var values = System.Enum.GetValues(actual).Cast<object>().Select(v => JsonSerializer.SerializeToElement(v, Options.SerializerOptions)).ToArray();
                 schema = Scalar(values.FirstOrDefault().ValueKind == JsonValueKind.String ? "string" : "integer");
                 schema.Enum = values.Cast<object>().ToArray();
+                if (actual.GetCustomAttribute<OpenRpcSchemaAttribute>(true)?.Name != null)
+                {
+                    var name = GetName(actual);
+                    if (_SchemaTypes.TryGetValue(name, out var prior) && prior != actual)
+                        throw new InvalidOperationException($"Schema name '{name}' is shared by {prior} and {actual}. Give the schema attributes or custom converters distinct names.");
+                    if (!Schemas.ContainsKey(name))
+                    {
+                        _SchemaTypes[name] = actual;
+                        Schemas.Add(name, schema);
+                        TransformSchema(type, actual, name, schema);
+                    }
+                    schema = new OpenRpcSchema { Ref = "#/components/schemas/" + name };
+                    transformed = true;
+                }
             }
             else if (actual == typeof(Guid)) schema = Scalar("string", "uuid");
             else if (actual == typeof(byte[])) schema = Scalar("string", "byte");
@@ -175,7 +189,7 @@ namespace HttpJsonRpc
                             continue;
                         }
                         schema.Properties.Add(property.Name, GetUsageSchema(property.PropertyType, OpenRpcSchemaUsageKind.Property, actual, property.Name, member, containing: nullability));
-                        var requiredOverride = member?.GetCustomAttribute<JsonRpcParameterAttribute>(true)?.RequiredOverride;
+                        var requiredOverride = member?.GetCustomAttribute<OpenRpcPropertyAttribute>(true)?.RequiredOverride;
                         if (requiredOverride ?? (property.IsRequired || (member is PropertyInfo requiredProp && requiredProp.IsRequired()))) required.Add(property.Name);
                     }
                     if (required.Count > 0) schema.Required = required.ToArray();

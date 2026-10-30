@@ -14,9 +14,6 @@ namespace HttpJsonRpc
         private readonly string _Name;
         public string Name => _Name;
 
-        private readonly string _Description;
-        public string Description => _Description;
-
         private readonly ImmutableArray<JsonRpcParameter> _Parameters;
         public ImmutableArray<JsonRpcParameter> Parameters => _Parameters;
 
@@ -50,8 +47,6 @@ namespace HttpJsonRpc
             }
             _FullName = $"{_ParentClass.Name}.{_Name}";
 
-            _Description = attribute.Description;
-
             var paramaterInfos = _MethodInfo.GetParameters();
             if (info.ContainsGenericParameters || info.ReturnType.IsByRef || info.ReturnType.IsPointer ||
                 paramaterInfos.Any(p => p.ParameterType.IsByRef || p.ParameterType.IsPointer) ||
@@ -64,7 +59,7 @@ namespace HttpJsonRpc
                 _Parameters = paramaterInfos.Where(p => p.ParameterType != typeof(CancellationToken) && p.GetCustomAttribute<JsonRpcParameterAttribute>()?.Ignore != true).Select(p =>
                 {
                     var attrib = p.GetCustomAttribute<JsonRpcParameterAttribute>();
-                    return new JsonRpcParameter(attrib?.Name ?? p.Name, attrib?.Description ?? "", p.ParameterType, p.IsOptional, parameterInfo: p, propertyInfo: null);
+                    return new JsonRpcParameter(attrib?.Name ?? p.Name, p.ParameterType, p.IsOptional, parameterInfo: p, propertyInfo: null);
                 }).ToImmutableArray();
             }
             else
@@ -80,10 +75,9 @@ namespace HttpJsonRpc
                         p.GetCustomAttribute<JsonRpcParameterAttribute>()?.Ignore != true)
                     .Select(p =>
                     {
-                        var attrib = p.GetCustomAttribute<JsonRpcParameterAttribute>();
                         var name = p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ??
                             JsonRpc.SerializerOptions.PropertyNamingPolicy?.ConvertName(p.Name) ?? p.Name;
-                        return new JsonRpcParameter(name, attrib?.Description ?? "", p.PropertyType, !p.IsRequired(), parameterInfo: null, propertyInfo: p);
+                        return new JsonRpcParameter(name, p.PropertyType, !p.IsRequired(), parameterInfo: null, propertyInfo: p);
                     }).ToImmutableArray();
             }
         }

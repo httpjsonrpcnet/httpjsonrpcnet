@@ -26,3 +26,14 @@ reorganizing unrelated legacy files.
   local variables, following .NET naming conventions.
 - Keep names, examples, and contracts independent of any consuming application.
 - Preserve existing file encoding and line endings when editing files.
+
+## Runtime and documentation attributes
+
+- Keep routing and parameter binding settings on `JsonRpc*` attributes.
+- Put API descriptions and schema constraints on `OpenRpc*` attributes. These are
+  documentation only and must not influence deserialization or invocation.
+- Use OpenRPC and JSON Schema terminology for documentation APIs, including
+  `OpenRpcProperty` for JSON object properties, even when backed by CLR fields.
+- Derive method and parameter names from the functional contract and property
+  names from the serializer contract. Only reusable schema component names may
+  be overridden by documentation attributes.

@@ -6,13 +6,13 @@ namespace HttpJsonRpc.Tests.Fixtures.OpenRpcNullability
 {
     public class Contract
     {
-        [JsonRpcParameter(Required = true, Nullable = false)]
+        [OpenRpcProperty(Required = true, Nullable = false)]
         public string RequiredValue { get; set; } = "";
-        [JsonRpcParameter(Required = true, Nullable = true)]
+        [OpenRpcProperty(Required = true, Nullable = true)]
         public string? RequiredNull { get; set; }
-        [JsonRpcParameter(Required = false, Nullable = false)]
+        [OpenRpcProperty(Required = false, Nullable = false)]
         public string? OptionalValue { get; set; }
-        [JsonRpcParameter(Required = false, Nullable = true)]
+        [OpenRpcProperty(Required = false, Nullable = true)]
         public string OptionalNull { get; set; } = "";
         public int? Age { get; set; }
         public int Count { get; set; }
@@ -30,11 +30,11 @@ namespace HttpJsonRpc.Tests.Fixtures.OpenRpcNullability
         public Tone? Tone { get; set; }
         [JsonRequired]
         public string? PresenceOnly { get; set; }
-        [JsonRequired, JsonRpcParameter(Required = false)]
+        [JsonRequired, OpenRpcProperty(Required = false)]
         public string? OverridePresence { get; set; }
-        [JsonRpcParameter(Nullable = false)]
+        [OpenRpcProperty(Nullable = false)]
         public Box<string?>? StrictReference { get; set; }
-        [JsonRpcParameter(Nullable = false)]
+        [OpenRpcProperty(Nullable = false)]
         public int? StrictNumber { get; set; }
     }
 }

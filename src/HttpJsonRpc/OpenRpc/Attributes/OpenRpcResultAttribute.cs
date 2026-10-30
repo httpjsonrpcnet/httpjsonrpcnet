@@ -2,12 +2,10 @@ using System;
 
 namespace HttpJsonRpc
 {
-    /// <summary>Describes a type in generated OpenRPC schemas.</summary>
-    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface | AttributeTargets.Enum, AllowMultiple = false, Inherited = true)]
-    public class JsonRpcSchemaAttribute : Attribute
+    /// <summary>Describes an OpenRPC result without changing runtime behavior.</summary>
+    [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
+    public class OpenRpcResultAttribute : Attribute
     {
-        /// <summary>Overrides the reusable component name and its references. Omit to retain generated naming.</summary>
-        public string Name { get; set; }
         public string Description { get; set; }
         internal OpenRpcSchemaConstraints Constraints { get; } = new OpenRpcSchemaConstraints();
         /// <summary>Describes the JSON Schema format constraint in discovery only.</summary>
@@ -35,5 +33,8 @@ namespace HttpJsonRpc
         /// <summary>Describes the JSON Schema uniqueItems constraint in discovery only.</summary>
         public bool UniqueItems { get => Constraints.UniqueItems.GetValueOrDefault(); set => Constraints.UniqueItems = value; }
 
+        /// <summary>Overrides result nullability in discovery only. Omit to infer from CLR metadata.</summary>
+        public bool Nullable { get => NullableOverride.GetValueOrDefault(); set => NullableOverride = value; }
+        internal bool? NullableOverride { get; private set; }
     }
 }

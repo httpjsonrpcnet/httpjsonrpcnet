@@ -4,7 +4,7 @@ namespace HttpJsonRpc.Tests.Fixtures.OpenRpcDescriptions
 {
     public class ContactRequest
     {
-        [JsonRpcParameter(Description = "The contact to create.")]
+        [OpenRpcProperty(Description = "The contact to create.")]
         [JsonPropertyName("contact_values")]
         public Contact Values { get; set; }
     }

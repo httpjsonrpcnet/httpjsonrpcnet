@@ -25,6 +25,7 @@ namespace HttpJsonRpc.Tests
         [OneTimeSetUp]
         public void Register()
         {
+            JsonRpc.RegisterClass(typeof(Fixtures.OpenRpcDiscovery.DiscoveryApi));
             JsonRpc.RegisterClass(typeof(ExtendedApi)); JsonRpc.RegisterClass(typeof(Api)); JsonRpc.RegisterClass(typeof(Owned)); JsonRpc.RegisterClass(typeof(UnitTests.UnitApi));
             JsonRpc.OnReceivedHttpRequest(c =>
             {
